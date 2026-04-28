@@ -171,6 +171,82 @@ def produto_info(base_df, bom_df, produto, estoque_final):
     return info
 
 
+def calculate_sprint3_indicators(base_prod, pivot, cobertura_target):
+    # Sprint 3 reconstruída como camada de cálculo reutilizável para a Sprint 4.
+    # Assunção simples: cobertura/desvio são avaliados no último mês com dados válidos do horizonte.
+    pv = pivot.set_index("Mes")["PV"] if "PV" in pivot else pd.Series(dtype=float)
+    estoque = pivot.set_index("Mes")["Estoque"] if "Estoque" in pivot else pd.Series(dtype=float)
+    demanda_diaria = pv.replace(0, np.nan) / 30
+    cobertura_dias_series = estoque / demanda_diaria
+    cobertura_vs_target_series = cobertura_dias_series / cobertura_target if cobertura_target else cobertura_dias_series * np.nan
+
+    real = base_prod[base_prod["RealizadoProxy"]].pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum")
+    real_pv = real["PV"] if "PV" in real else pd.Series(dtype=float)
+    desvio_series = ((real_pv - pv) / pv.replace(0, np.nan)).reindex(MESES)
+
+    cobertura_vs_target = float(cobertura_vs_target_series.dropna().iloc[-1]) if len(cobertura_vs_target_series.dropna()) else np.nan
+    desvio_demanda = float(desvio_series.dropna().iloc[-1]) if len(desvio_series.dropna()) else np.nan
+    meses_criticos = int((desvio_series < -0.10).sum()) if len(desvio_series.dropna()) else 0
+
+    return {
+        "cobertura_vs_target": cobertura_vs_target,
+        "desvio_demanda": desvio_demanda,
+        "meses_criticos": meses_criticos,
+        "cobertura_vs_target_series": cobertura_vs_target_series.reindex(MESES),
+        "desvio_series": desvio_series,
+    }
+
+
+def generate_sprint4_triggers(pivot, indicators):
+    # Sprint 4: detecta e explica problemas; não recomenda ações nem toma decisões.
+    cov_vs_target = indicators["cobertura_vs_target"]
+    desvio = indicators["desvio_demanda"]
+    meses_criticos = indicators["meses_criticos"]
+    excesso_detectado = pd.notna(cov_vs_target) and pd.notna(desvio) and cov_vs_target > 1 and desvio < 0
+
+    if not excesso_detectado or abs(desvio) < 0.10:
+        severidade = "nenhum"
+    elif desvio < -0.25:
+        severidade = "severo"
+    else:
+        severidade = "moderado"
+
+    recorrencia = "recorrente" if meses_criticos >= 2 else "pontual"
+    if excesso_detectado and severidade != "nenhum":
+        descricao = f"Excesso {severidade} {recorrencia} detectado: cobertura acima do target e demanda {abs(desvio) * 100:.1f}% abaixo do previsto em {meses_criticos} meses do horizonte."
+    elif excesso_detectado:
+        descricao = f"Excesso sem alerta detectado: cobertura acima do target e demanda {abs(desvio) * 100:.1f}% abaixo do previsto, abaixo do limite de 10%."
+    else:
+        descricao = "Nenhum gatilho de excesso disparado para esta revisão."
+
+    alert_rows = []
+    base = pivot.set_index("Mes")
+    cov_series = indicators["cobertura_vs_target_series"]
+    desvio_series = indicators["desvio_series"]
+    for mes in MESES:
+        cov_m = cov_series.get(mes, np.nan)
+        desv_m = desvio_series.get(mes, np.nan)
+        if pd.notna(cov_m) and pd.notna(desv_m) and cov_m > 1 and desv_m < -0.10:
+            sev = "excesso severo" if desv_m < -0.25 else "excesso moderado"
+            alert_rows.append({
+                "Mês": mes,
+                "Tipo de alerta": sev,
+                "Detalhe explicativo": f"Cobertura {cov_m * 100:.1f}% do target e demanda {abs(desv_m) * 100:.1f}% abaixo do previsto.",
+                "PV": base.at[mes, "PV"] if "PV" in base.columns and mes in base.index else np.nan,
+                "Produção": base.at[mes, "Producao"] if "Producao" in base.columns and mes in base.index else np.nan,
+                "Estoque": base.at[mes, "Estoque"] if "Estoque" in base.columns and mes in base.index else np.nan,
+            })
+
+    return {
+        "excesso_detectado": excesso_detectado,
+        "severidade": severidade,
+        "recorrencia": recorrencia,
+        "descricao": descricao,
+        "tooltip": "Regra: cobertura_vs_target > 1 AND desvio_demanda < 0. Severidade: sem alerta se |desvio| < 10%, moderado entre -10% e -25%, severo se menor que -25%. Recorrência: meses_criticos >= 2.",
+        "alert_table": pd.DataFrame(alert_rows),
+    }
+
+
 def format_num(v):
     v = float(v)
     if abs(v) >= 1_000_000:
@@ -274,6 +350,8 @@ lt_cls = "red" if lt_sem > 16 else "orange" if lt_sem > 10 else "green"
 ct_cls = "red" if lt_dias > ct_dias else "green"
 dem_cls = "red" if "queda" in str(info["Demanda"]).lower() else "green"
 est_cls = "red" if est_final < 0 else ""
+indicators = calculate_sprint3_indicators(base_prod, pivot, ct_dias)
+triggers = generate_sprint4_triggers(pivot, indicators)
 
 st.markdown('<div class="struct-wrapper">', unsafe_allow_html=True)
 scols = st.columns(5, gap="small")
@@ -339,6 +417,22 @@ if rev in MESES:
 fig.update_layout(paper_bgcolor="#101010", plot_bgcolor="#101010", font=dict(color="#9ca3af", size=13), height=430, margin=dict(l=30, r=18, t=18, b=35), legend=dict(orientation="h", y=-.22, x=.20, font=dict(size=14, color="#cfd4dc")), xaxis=dict(gridcolor="#202020", zerolinecolor="#202020"), yaxis=dict(gridcolor="#202020", zerolinecolor="#202020"), hovermode="x unified", hoverlabel=dict(bgcolor="#171717", bordercolor="#2a2a2a", font=dict(color="#f5f5f5", size=13)))
 st.plotly_chart(fig, use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown(f'<div class="section-title">GATILHOS AUTOMATICOS - PRODUTO {produto} - {rev.upper()}</div>', unsafe_allow_html=True)
+if triggers["severidade"] == "severo":
+    st.markdown(f'<div class="alert-box" title="{triggers["tooltip"]}"><strong>🔴 Excesso severo:</strong> {triggers["descricao"]}</div>', unsafe_allow_html=True)
+elif triggers["severidade"] == "moderado":
+    st.markdown(f'<div class="warn-box" title="{triggers["tooltip"]}"><strong>🟡 Excesso moderado:</strong> {triggers["descricao"]}</div>', unsafe_allow_html=True)
+else:
+    st.markdown(f'<div class="success-box" title="{triggers["tooltip"]}"><strong>🟢 Sem gatilho crítico:</strong> {triggers["descricao"]}</div>', unsafe_allow_html=True)
+
+if not triggers["alert_table"].empty:
+    display_alerts = triggers["alert_table"].copy()
+    for col in ["PV", "Produção", "Estoque"]:
+        display_alerts[col] = display_alerts[col].map(lambda x: "-" if pd.isna(x) else format_num(x))
+    st.dataframe(display_alerts, use_container_width=True)
+else:
+    st.info("Nenhum mês do horizonte disparou alerta de excesso pela regra da Sprint 4.")
 
 st.markdown(f'<div class="section-title">CONCLUSAO - PRODUTO {produto} - {rev.upper()}</div>', unsafe_allow_html=True)
 alerts = []
