@@ -4,64 +4,276 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="Smart Launch | Supply Chain", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(
+    page_title="Smart Launch | Supply Chain",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .stApp { background:#000; color:#f5f5f5; }
 .block-container { padding-top: .25rem; max-width: 1188px; }
 [data-testid="stHeader"] { background: transparent; }
 [data-testid="stSidebar"] { background:#0d0d0d; border-right:1px solid #242424; }
 #MainMenu, footer { visibility:hidden; }
-.hero-title { font-size:34px; line-height:.92; font-weight:900; letter-spacing:-1.5px; text-transform:uppercase; margin-bottom:10px; color:#fff; white-space:nowrap; overflow:hidden; }
+
+.hero-title {
+    font-size:34px;
+    line-height:.92;
+    font-weight:900;
+    letter-spacing:-1.5px;
+    text-transform:uppercase;
+    margin-bottom:10px;
+    color:#fff;
+    white-space:nowrap;
+    overflow:hidden;
+}
+
 .hero-subtitle { color:#9ca3af; font-size:14px; margin-bottom:18px; }
 .sep { height:1px; background:#202020; margin:18px 0 25px; }
-.empty-panel { background:#101010; border:1px dashed #3a3a3a; border-radius:10px; padding:34px 28px; margin-top:22px; }
+
+.empty-panel {
+    background:#101010;
+    border:1px dashed #3a3a3a;
+    border-radius:10px;
+    padding:34px 28px;
+    margin-top:22px;
+}
 .empty-title { font-size:24px; font-weight:850; margin-bottom:8px; }
 .empty-text { color:#a5a5a5; font-size:15px; line-height:1.6; }
-.panel { background:#101010; border:1px solid #2a2a2a; border-radius:8px; padding:16px 18px; margin-bottom:14px; }
+
+.panel {
+    background:#101010;
+    border:1px solid #2a2a2a;
+    border-radius:8px;
+    padding:16px 18px;
+    margin-bottom:14px;
+}
+
 .product-panel { padding:14px 18px 12px; }
-.product-panel .stSelectbox label { color:#9b9b9b !important; text-transform:uppercase; letter-spacing:1.5px; font-size:13px; font-weight:500; }
-.product-panel [data-baseweb="select"] > div { background:#151515 !important; border:1px solid #333 !important; border-radius:6px !important; color:#fff !important; min-height:40px; }
-.product-panel [data-baseweb="select"] span { color:#fff !important; font-weight:650; }
-.struct-wrapper { background:#101010; border:1px solid #2a2a2a; border-radius:8px; overflow:hidden; margin-bottom:26px; }
-.struct-box { min-height:96px; padding:16px 16px 14px; border-right:1px solid #2a2a2a; box-sizing:border-box; background:#101010; }
-.struct-box-last { min-height:96px; padding:16px 16px 14px; box-sizing:border-box; background:#101010; }
-.label { color:#666; font-size:13px; text-transform:uppercase; letter-spacing:1.5px; font-weight:500; }
-.value { color:#fff; font-size:18px; font-weight:800; margin-top:7px; white-space:nowrap; }
-.sub { color:#9ca3af; font-size:13px; margin-top:7px; white-space:nowrap; }
-.orange { color:#e8a24a; } .red { color:#f05a5f; } .blue { color:#5b9cff; } .green { color:#1ca37e; } .yellow { color:#f4c21f; }
-.tab-single { border-bottom:1px solid #262626; margin:22px 0 20px; }
-.tab-single span { display:inline-block; padding:0 26px 14px 26px; text-transform:uppercase; letter-spacing:2px; font-size:15px; font-weight:800; color:#fff; border-bottom:4px solid #fff; }
-.review-panel { background:#101010; border:1px solid #2a2a2a; border-radius:8px; padding:20px 18px 16px; margin-bottom:14px; }
-.review-title { font-size:20px; font-weight:900; letter-spacing:.3px; margin-bottom:18px; }
-.month-row div[data-testid="stButton"] button { height:36px !important; border-radius:4px !important; border:1px solid #303030 !important; background:#171717 !important; color:#a6adb8 !important; font-weight:650 !important; padding:0 !important; box-shadow:none !important; }
+.product-panel .stSelectbox label {
+    color:#9b9b9b !important;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    font-size:13px;
+    font-weight:500;
+}
+.product-panel [data-baseweb="select"] > div {
+    background:#151515 !important;
+    border:1px solid #333 !important;
+    border-radius:6px !important;
+    color:#fff !important;
+    min-height:40px;
+}
+.product-panel [data-baseweb="select"] span {
+    color:#fff !important;
+    font-weight:650;
+}
+
+.struct-wrapper {
+    background:#101010;
+    border:1px solid #2a2a2a;
+    border-radius:8px;
+    overflow:hidden;
+    margin-bottom:26px;
+}
+.struct-box {
+    min-height:96px;
+    padding:16px 16px 14px;
+    border-right:1px solid #2a2a2a;
+    box-sizing:border-box;
+    background:#101010;
+}
+.struct-box-last {
+    min-height:96px;
+    padding:16px 16px 14px;
+    box-sizing:border-box;
+    background:#101010;
+}
+.label {
+    color:#666;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    font-weight:500;
+}
+.value {
+    color:#fff;
+    font-size:18px;
+    font-weight:800;
+    margin-top:7px;
+    white-space:nowrap;
+}
+.sub {
+    color:#9ca3af;
+    font-size:13px;
+    margin-top:7px;
+    white-space:nowrap;
+}
+
+.orange { color:#e8a24a; }
+.red { color:#f05a5f; }
+.blue { color:#5b9cff; }
+.green { color:#1ca37e; }
+.yellow { color:#f4c21f; }
+
+.tab-single {
+    border-bottom:1px solid #262626;
+    margin:22px 0 20px;
+}
+.tab-single span {
+    display:inline-block;
+    padding:0 26px 14px 26px;
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-size:15px;
+    font-weight:800;
+    color:#fff;
+    border-bottom:4px solid #fff;
+}
+
+.review-panel {
+    background:#101010;
+    border:1px solid #2a2a2a;
+    border-radius:8px;
+    padding:20px 18px 16px;
+    margin-bottom:14px;
+}
+.review-title {
+    font-size:20px;
+    font-weight:900;
+    letter-spacing:.3px;
+    margin-bottom:18px;
+}
+
+.month-row div[data-testid="stButton"] button {
+    height:36px !important;
+    border-radius:4px !important;
+    border:1px solid #303030 !important;
+    background:#171717 !important;
+    color:#a6adb8 !important;
+    font-weight:650 !important;
+    padding:0 !important;
+    box-shadow:none !important;
+}
 .month-row div[data-testid="stButton"] button p { color:#a6adb8 !important; }
-.month-row div[data-testid="stButton"] button:hover { background:#222222 !important; border-color:#3a3a3a !important; color:#ffffff !important; }
+.month-row div[data-testid="stButton"] button:hover {
+    background:#222222 !important;
+    border-color:#3a3a3a !important;
+    color:#ffffff !important;
+}
 .month-row div[data-testid="stButton"] button:hover p { color:#ffffff !important; }
-.month-row div[data-testid="stButton"] button[kind="primary"] { background: var(--accent) !important; color:#050505 !important; border-color: var(--accent) !important; font-weight:800 !important; }
-.month-row div[data-testid="stButton"] button[kind="primary"] p { color:#050505 !important; font-weight:800 !important; }
-.metric-card { min-height:112px; background:#101010; border:1px solid #2a2a2a; border-radius:6px; padding:20px 18px; }
+.month-row div[data-testid="stButton"] button[kind="primary"] {
+    background: var(--accent) !important;
+    color:#050505 !important;
+    border-color: var(--accent) !important;
+    font-weight:800 !important;
+}
+.month-row div[data-testid="stButton"] button[kind="primary"] p {
+    color:#050505 !important;
+    font-weight:800 !important;
+}
+
+.metric-card {
+    min-height:112px;
+    background:#101010;
+    border:1px solid #2a2a2a;
+    border-radius:6px;
+    padding:20px 18px;
+}
 .metric-card.danger { border-top:4px solid #ef4444; }
-.metric-label { color:#5e5e5e; font-size:13px; text-transform:uppercase; letter-spacing:1.5px; font-weight:500; }
-.metric-value { color:#fff; font-size:26px; font-weight:850; margin-top:12px; line-height:1.05; }
+.metric-label {
+    color:#5e5e5e;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    font-weight:500;
+}
+.metric-value {
+    color:#fff;
+    font-size:26px;
+    font-weight:850;
+    margin-top:12px;
+    line-height:1.05;
+}
 .metric-value.accent { color:var(--accent); }
 .metric-delta { color:#9ca3af; font-size:14px; margin-top:8px; }
-.section-title { color:#9a9a9a; text-transform:uppercase; letter-spacing:2px; font-size:15px; font-weight:500; margin:18px 0 10px; }
-.chart-card { background:#101010; border:1px solid #2a2a2a; border-radius:8px; padding:8px 12px 2px; }
-.alert-box,.warn-box,.success-box { border-radius:8px; padding:16px 20px; color:#fff; font-size:16px; line-height:1.5; margin-bottom:10px; }
-.alert-box { background:linear-gradient(90deg,rgba(239,68,68,.22),rgba(239,68,68,.05)); border-left:6px solid #ef4444; }
-.warn-box { background:linear-gradient(90deg,rgba(250,204,21,.18),rgba(250,204,21,.04)); border-left:6px solid #facc15; }
-.success-box { background:linear-gradient(90deg,rgba(22,163,123,.20),rgba(22,163,123,.04)); border-left:6px solid #16a37b; }
-</style>
-""", unsafe_allow_html=True)
 
-MESES = ["jun/25", "jul/25", "ago/25", "set/25", "out/25", "nov/25", "dez/25", "jan/26", "fev/26", "mar/26", "abr/26", "mai/26", "jun/26"]
+.section-title {
+    color:#9a9a9a;
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-size:15px;
+    font-weight:500;
+    margin:18px 0 10px;
+}
+.chart-card {
+    background:#101010;
+    border:1px solid #2a2a2a;
+    border-radius:8px;
+    padding:8px 12px 2px;
+}
+
+.alert-box,.warn-box,.success-box {
+    border-radius:8px;
+    padding:16px 20px;
+    color:#fff;
+    font-size:16px;
+    line-height:1.5;
+    margin-bottom:10px;
+}
+.alert-box {
+    background:linear-gradient(90deg,rgba(239,68,68,.22),rgba(239,68,68,.05));
+    border-left:6px solid #ef4444;
+}
+.warn-box {
+    background:linear-gradient(90deg,rgba(250,204,21,.18),rgba(250,204,21,.04));
+    border-left:6px solid #facc15;
+}
+.success-box {
+    background:linear-gradient(90deg,rgba(22,163,123,.20),rgba(22,163,123,.04));
+    border-left:6px solid #16a37b;
+}
+
+.trigger-pills {
+    display:flex;
+    gap:14px;
+    margin:12px 0 4px;
+}
+.trigger-pill-red {
+    border:1px solid #ef4444;
+    color:#ef4444;
+    border-radius:999px;
+    padding:8px 14px;
+}
+.trigger-pill-yellow {
+    border:1px solid #d49100;
+    color:#d49100;
+    border-radius:999px;
+    padding:8px 14px;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+
+MESES = [
+    "jun/25", "jul/25", "ago/25", "set/25", "out/25", "nov/25", "dez/25",
+    "jan/26", "fev/26", "mar/26", "abr/26", "mai/26", "jun/26"
+]
 REVISOES = MESES[:9]
 PRODUTOS = list("ABCDEFGHIJKLMNOP")
-MONTH_MAP = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6, "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12}
+MONTH_MAP = {
+    "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+    "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12
+}
 
 
 def mes_to_period(x):
@@ -104,26 +316,44 @@ def parse_product_sheet(xls, product):
     blocks = find_blocks(raw)
     if len(blocks) < 3:
         raise ValueError(f"Não encontrei os 3 blocos na aba {product}.")
+
     out = []
     ordered = sorted(blocks.items(), key=lambda kv: kv[1])
+
     for idx, (var, start) in enumerate(ordered):
         end = ordered[idx + 1][1] if idx + 1 < len(ordered) else len(raw)
         sub = raw.iloc[start + 1:end].dropna(how="all")
         hrel = find_header_row(sub.reset_index(drop=True))
+
         if hrel is None:
             continue
+
         header_idx = sub.index[hrel]
         header = raw.iloc[header_idx]
-        target_cols = [(j, mes_to_period(v)) for j, v in enumerate(header.tolist()) if mes_to_period(v) is not None]
+        target_cols = [
+            (j, mes_to_period(v))
+            for j, v in enumerate(header.tolist())
+            if mes_to_period(v) is not None
+        ]
         label_col = max(0, target_cols[0][0] - 1)
+
         for r in range(header_idx + 1, end):
             revp = mes_to_period(raw.iat[r, label_col])
             if revp is None:
                 continue
+
             for j, tp in target_cols:
                 val = pd.to_numeric(raw.iat[r, j], errors="coerce")
                 if pd.notna(val):
-                    out.append({"Produto": product, "Variavel": var, "Revisao": period_label(revp), "Mes": period_label(tp), "Valor": float(val), "RealizadoProxy": revp == tp})
+                    out.append({
+                        "Produto": product,
+                        "Variavel": var,
+                        "Revisao": period_label(revp),
+                        "Mes": period_label(tp),
+                        "Valor": float(val),
+                        "RealizadoProxy": revp == tp,
+                    })
+
     return pd.DataFrame(out)
 
 
@@ -144,136 +374,168 @@ def col_like(df, keys):
 
 
 def produto_info(base_df, bom_df, produto, estoque_final):
-    info = {"Origem": "-", "CoberturaTargetDias": 75, "HBdias": "-", "LTSemanas": 16, "Demanda": "-", "EstoqueFinal": estoque_final}
+    info = {
+        "Origem": "-",
+        "CoberturaTargetDias": 75,
+        "HBdias": "-",
+        "LTSemanas": 16,
+        "Demanda": "-",
+        "EstoqueFinal": estoque_final,
+    }
+
     if not base_df.empty:
         pcol = base_df.columns[1] if len(base_df.columns) > 1 else base_df.columns[0]
         row = base_df[base_df[pcol].astype(str).str.upper().str.strip().eq(produto.upper())]
+
         if row.empty:
             pcol_alt = col_like(base_df, ["produto"]) or base_df.columns[0]
             row = base_df[base_df[pcol_alt].astype(str).str.upper().str.strip().eq(produto.upper())]
+
         if not row.empty:
             row = row.iloc[0]
+
             if len(base_df.columns) > 2 and pd.notna(row.iloc[2]):
                 info["Origem"] = row.iloc[2]
+
             if len(base_df.columns) > 11 and pd.notna(row.iloc[11]):
                 info["Demanda"] = row.iloc[11]
+
             for key, names in {"CoberturaTargetDias": ["cobertura"], "HBdias": ["hb"]}.items():
                 c = col_like(base_df, names)
                 if c is not None and pd.notna(row[c]):
                     info[key] = row[c]
+
     if not bom_df.empty:
         pcol = col_like(bom_df, ["produto"]) or bom_df.columns[0]
         ltcol = col_like(bom_df, ["lt"]) or col_like(bom_df, ["lead"])
+
         if ltcol is not None:
-            vals = pd.to_numeric(bom_df[bom_df[pcol].astype(str).str.upper().str.strip().eq(produto.upper())][ltcol], errors="coerce").dropna()
+            vals = pd.to_numeric(
+                bom_df[bom_df[pcol].astype(str).str.upper().str.strip().eq(produto.upper())][ltcol],
+                errors="coerce",
+            ).dropna()
+
             if len(vals):
                 info["LTSemanas"] = float(vals.max())
+
     return info
 
 
-def calculate_sprint3_indicators(base_prod, pivot, cobertura_target):
-    # Sprint 3 reconstruída como camada de cálculo reutilizável para a Sprint 4.
-    # Assunção simples: cobertura/desvio são avaliados no último mês com dados válidos do horizonte.
-    pv = pivot.set_index("Mes")["PV"] if "PV" in pivot else pd.Series(dtype=float)
-    estoque = pivot.set_index("Mes")["Estoque"] if "Estoque" in pivot else pd.Series(dtype=float)
-    demanda_diaria = pv.replace(0, np.nan) / 30
-    cobertura_dias_series = estoque / demanda_diaria
-    cobertura_vs_target_series = cobertura_dias_series / cobertura_target if cobertura_target else cobertura_dias_series * np.nan
-
-    real = base_prod[base_prod["RealizadoProxy"]].pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum")
-    real_pv = real["PV"] if "PV" in real else pd.Series(dtype=float)
-    desvio_series = ((real_pv - pv) / pv.replace(0, np.nan)).reindex(MESES)
-
-    cobertura_vs_target = float(cobertura_vs_target_series.dropna().iloc[-1]) if len(cobertura_vs_target_series.dropna()) else np.nan
-    desvio_demanda = float(desvio_series.dropna().iloc[-1]) if len(desvio_series.dropna()) else np.nan
-    meses_criticos = int((desvio_series < -0.10).sum()) if len(desvio_series.dropna()) else 0
-
-    return {
-        "cobertura_vs_target": cobertura_vs_target,
-        "desvio_demanda": desvio_demanda,
-        "meses_criticos": meses_criticos,
-        "cobertura_vs_target_series": cobertura_vs_target_series.reindex(MESES),
-        "desvio_series": desvio_series,
-    }
-
-
-def generate_sprint4_triggers(pivot, indicators):
-    # Sprint 4: detecta e explica problemas; não recomenda ações nem toma decisões.
-    cov_vs_target = indicators["cobertura_vs_target"]
-    desvio = indicators["desvio_demanda"]
-    meses_criticos = indicators["meses_criticos"]
-    excesso_detectado = pd.notna(cov_vs_target) and pd.notna(desvio) and cov_vs_target > 1 and desvio < 0
-
-    if not excesso_detectado or abs(desvio) < 0.10:
-        severidade = "nenhum"
-    elif desvio < -0.25:
-        severidade = "severo"
-    else:
-        severidade = "moderado"
-
-    recorrencia = "recorrente" if meses_criticos >= 2 else "pontual"
-    if excesso_detectado and severidade != "nenhum":
-        descricao = f"Excesso {severidade} {recorrencia} detectado: cobertura acima do target e demanda {abs(desvio) * 100:.1f}% abaixo do previsto em {meses_criticos} meses do horizonte."
-    elif excesso_detectado:
-        descricao = f"Excesso sem alerta detectado: cobertura acima do target e demanda {abs(desvio) * 100:.1f}% abaixo do previsto, abaixo do limite de 10%."
-    else:
-        descricao = "Nenhum gatilho de excesso disparado para esta revisão."
-
-    alert_rows = []
+def generate_monthly_triggers(pivot, cobertura_target):
+    """
+    Gatilhos por mês para visualização no gráfico.
+    Não sugere ações; apenas detecta e explica.
+    """
     base = pivot.set_index("Mes")
-    cov_series = indicators["cobertura_vs_target_series"]
-    desvio_series = indicators["desvio_series"]
-    for mes in MESES:
-        cov_m = cov_series.get(mes, np.nan)
-        desv_m = desvio_series.get(mes, np.nan)
-        if pd.notna(cov_m) and pd.notna(desv_m) and cov_m > 1 and desv_m < -0.10:
-            sev = "excesso severo" if desv_m < -0.25 else "excesso moderado"
-            alert_rows.append({
-                "Mês": mes,
-                "Tipo de alerta": sev,
-                "Detalhe explicativo": f"Cobertura {cov_m * 100:.1f}% do target e demanda {abs(desv_m) * 100:.1f}% abaixo do previsto.",
-                "PV": base.at[mes, "PV"] if "PV" in base.columns and mes in base.index else np.nan,
-                "Produção": base.at[mes, "Producao"] if "Producao" in base.columns and mes in base.index else np.nan,
-                "Estoque": base.at[mes, "Estoque"] if "Estoque" in base.columns and mes in base.index else np.nan,
-            })
+    rows = []
 
-    return {
-        "excesso_detectado": excesso_detectado,
-        "severidade": severidade,
-        "recorrencia": recorrencia,
-        "descricao": descricao,
-        "tooltip": "Regra: cobertura_vs_target > 1 AND desvio_demanda < 0. Severidade: sem alerta se |desvio| < 10%, moderado entre -10% e -25%, severo se menor que -25%. Recorrência: meses_criticos >= 2.",
-        "alert_table": pd.DataFrame(alert_rows),
-    }
+    if "PV" not in base.columns or "Estoque" not in base.columns:
+        return pd.DataFrame(rows)
+
+    pv = base["PV"].replace(0, np.nan)
+    estoque = base["Estoque"]
+    cobertura_dias = estoque / (pv / 30)
+
+    for mes in MESES:
+        if mes not in base.index or pd.isna(cobertura_dias.get(mes, np.nan)):
+            continue
+
+        pv_v = base.at[mes, "PV"] if "PV" in base.columns else np.nan
+        prod_v = base.at[mes, "Producao"] if "Producao" in base.columns else np.nan
+        est_v = base.at[mes, "Estoque"] if "Estoque" in base.columns else np.nan
+        cob = float(cobertura_dias[mes])
+
+        if cob < cobertura_target * 0.50:
+            tipo = "Alerta vermelho"
+            nivel = "vermelho"
+            cor = "#ef4444"
+            detalhe = f"Cobertura {cob:.0f}d < {cobertura_target * 0.50:.0f}d mínimo"
+        elif cob < cobertura_target * 0.75:
+            tipo = "Alerta amarelo"
+            nivel = "amarelo"
+            cor = "#d49100"
+            detalhe = f"Cobertura {cob:.0f}d abaixo do target"
+        else:
+            continue
+
+        rows.append({
+            "Mês": mes,
+            "Tipo": tipo,
+            "Nível": nivel,
+            "Cor": cor,
+            "Detalhe": detalhe,
+            "PV": pv_v,
+            "Produção": prod_v,
+            "Estoque": est_v,
+            "Cobertura dias": cob,
+        })
+
+    return pd.DataFrame(rows)
 
 
 def format_num(v):
     v = float(v)
+
     if abs(v) >= 1_000_000:
         return f"{v / 1_000_000:.1f}M"
+
     if abs(v) >= 1000:
         return f"{v:,.0f}".replace(",", ".")
+
     return f"{v:.0f}"
 
 
 def short_num(v):
     v = float(v)
-    return f"{v / 1_000_000:.1f}M" if abs(v) >= 1_000_000 else f"{v / 1000:.0f}k" if abs(v) >= 1000 else f"{v:.0f}"
+
+    if abs(v) >= 1_000_000:
+        return f"{v / 1_000_000:.1f}M"
+
+    if abs(v) >= 1000:
+        return f"{v / 1000:.0f}k"
+
+    return f"{v:.0f}"
 
 
 def cor_revisao(rev):
-    return "#5b9cff" if str(rev).startswith("jun") else "#16a37b" if str(rev).startswith("jul") else "#e5533f" if str(rev).startswith("ago") else "#f4c21f"
+    if str(rev).startswith("jun"):
+        return "#5b9cff"
+    if str(rev).startswith("jul"):
+        return "#16a37b"
+    if str(rev).startswith("ago"):
+        return "#e5533f"
+    return "#f4c21f"
 
 
 def metric_card(label, value, delta="", accent=False, danger=False):
     cls = "metric-card danger" if danger else "metric-card"
     vcls = "metric-value accent" if accent else "metric-value"
-    st.markdown(f'<div class="{cls}"><div class="metric-label">{label}</div><div class="{vcls}">{value}</div><div class="metric-delta">{delta}</div></div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f'''
+        <div class="{cls}">
+            <div class="metric-label">{label}</div>
+            <div class="{vcls}">{value}</div>
+            <div class="metric-delta">{delta}</div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
 
 
 def struct_box(label, value, sub, cls, last=False):
     box_cls = "struct-box-last" if last else "struct-box"
-    st.markdown(f'<div class="{box_cls}"><div class="label">{label}</div><div class="value {cls}">{value}</div><div class="sub">{sub}</div></div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f'''
+        <div class="{box_cls}">
+            <div class="label">{label}</div>
+            <div class="value {cls}">{value}</div>
+            <div class="sub">{sub}</div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
 
 
 with st.sidebar:
@@ -281,112 +543,180 @@ with st.sidebar:
     arquivo = st.file_uploader("Suba sua base Excel", type=["xlsx"])
     st.caption("O arquivo pode ter qualquer nome, desde que respeite o formato: abas Base, BOM e produtos A–P.")
 
+
 st.markdown('<div class="hero-title">SMART LAUNCH & RESPONSIVENESS TO GROWTH</div>', unsafe_allow_html=True)
 st.markdown('<div class="hero-subtitle">Produtos A–E · Jun/2025-Jun/2026</div>', unsafe_allow_html=True)
 st.markdown('<div class="sep"></div>', unsafe_allow_html=True)
 
+
 if arquivo is None:
-    st.markdown('''
-    <div class="empty-panel">
-        <div class="empty-title">Nenhuma base carregada</div>
-        <div class="empty-text">
-            Envie um arquivo Excel no menu lateral para liberar o dashboard. O arquivo não precisa ter um nome específico, mas deve manter o formato esperado: aba <strong>Base</strong>, aba <strong>BOM</strong> e abas de produto <strong>A–P</strong> com blocos de PV, Produção e Estoque.
+    st.markdown(
+        '''
+        <div class="empty-panel">
+            <div class="empty-title">Nenhuma base carregada</div>
+            <div class="empty-text">
+                Envie um arquivo Excel no menu lateral para liberar o dashboard.
+                O arquivo não precisa ter um nome específico, mas deve manter o formato esperado:
+                aba <strong>Base</strong>, aba <strong>BOM</strong> e abas de produto
+                <strong>A–P</strong> com blocos de PV, Produção e Estoque.
+            </div>
         </div>
-    </div>
-    ''', unsafe_allow_html=True)
+        ''',
+        unsafe_allow_html=True,
+    )
     st.stop()
+
 
 try:
     xls = pd.ExcelFile(arquivo)
     base_df = parse_sheet(xls, "Base")
     bom_df = parse_sheet(xls, "BOM")
+
     partes = []
     erros = []
+
     for p in [s for s in xls.sheet_names if str(s).strip().upper() in PRODUTOS]:
         try:
             partes.append(parse_product_sheet(xls, p.strip().upper()))
         except Exception as e:
             erros.append(str(e))
+
     if not partes:
         st.error("Não consegui extrair as abas de produto. Verifique se existem abas A–P com os blocos PV, Produção e Estoque.")
         if erros:
             st.code("\n".join(erros[:6]))
         st.stop()
+
     long_df = pd.concat(partes, ignore_index=True)
+
 except Exception as e:
     st.error("Não foi possível ler a base enviada. Verifique se o arquivo está no formato esperado.")
     st.code(str(e))
     st.stop()
 
+
 produtos = sorted(long_df["Produto"].unique())
 options = []
+
 for p in produtos:
-    piv = long_df[(long_df["Produto"] == p) & (long_df["Revisao"] == REVISOES[-1])].pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum").reindex(MESES)
+    piv = (
+        long_df[(long_df["Produto"] == p) & (long_df["Revisao"] == REVISOES[-1])]
+        .pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum")
+        .reindex(MESES)
+    )
+
     est = piv["Estoque"].dropna().iloc[-1] if "Estoque" in piv and len(piv["Estoque"].dropna()) else 0
     inf = produto_info(base_df, bom_df, p, est)
-    options.append(f"Produto {p} - {inf['Origem']} - Cob.T {float(pd.to_numeric(inf['CoberturaTargetDias'], errors='coerce') or 75):.0f}d - LT {float(pd.to_numeric(inf['LTSemanas'], errors='coerce') or 16):.0f}sem - {inf['Demanda']}")
+
+    cobertura_target_option = float(pd.to_numeric(inf["CoberturaTargetDias"], errors="coerce") or 75)
+    lt_option = float(pd.to_numeric(inf["LTSemanas"], errors="coerce") or 16)
+
+    options.append(
+        f"Produto {p} - {inf['Origem']} - Cob.T {cobertura_target_option:.0f}d - "
+        f"LT {lt_option:.0f}sem - {inf['Demanda']}"
+    )
+
 
 st.markdown('<div class="panel product-panel">', unsafe_allow_html=True)
 sel = st.selectbox("Produto", options, index=0)
 st.markdown('</div>', unsafe_allow_html=True)
+
 produto = re.search(r"Produto ([A-P])", sel).group(1)
 base_prod = long_df[long_df["Produto"] == produto]
+
 revisoes = [m for m in REVISOES if m in set(base_prod["Revisao"])] or sorted(base_prod["Revisao"].unique())
+
 if "revisao" not in st.session_state or st.session_state.revisao not in revisoes:
     st.session_state.revisao = revisoes[0]
+
 rev = st.session_state.revisao
 accent = cor_revisao(rev)
+
 st.markdown(f"<style>:root{{--accent:{accent};}}</style>", unsafe_allow_html=True)
-pivot = base_prod[base_prod["Revisao"] == rev].pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum").reindex(MESES).reset_index()
+
+pivot = (
+    base_prod[base_prod["Revisao"] == rev]
+    .pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum")
+    .reindex(MESES)
+    .reset_index()
+)
+
 est_final = pivot["Estoque"].dropna().iloc[-1] if "Estoque" in pivot and len(pivot["Estoque"].dropna()) else 0
 info = produto_info(base_df, bom_df, produto, est_final)
+
 lt_sem = float(pd.to_numeric(info["LTSemanas"], errors="coerce") if pd.notna(info["LTSemanas"]) else 16)
 lt_dias = int(round(lt_sem * 7))
 lt_meses = lt_dias / 30
+
 ct_dias = float(pd.to_numeric(info["CoberturaTargetDias"], errors="coerce") if pd.notna(info["CoberturaTargetDias"]) else 75)
 ct_meses = ct_dias / 30
 ct_sem = ct_dias / 7
+
 lt_cls = "red" if lt_sem > 16 else "orange" if lt_sem > 10 else "green"
 ct_cls = "red" if lt_dias > ct_dias else "green"
 dem_cls = "red" if "queda" in str(info["Demanda"]).lower() else "green"
 est_cls = "red" if est_final < 0 else ""
-indicators = calculate_sprint3_indicators(base_prod, pivot, ct_dias)
-triggers = generate_sprint4_triggers(pivot, indicators)
+
+monthly_triggers = generate_monthly_triggers(pivot, ct_dias)
+
 
 st.markdown('<div class="struct-wrapper">', unsafe_allow_html=True)
 scols = st.columns(5, gap="small")
-items = [("ORIGEM", info["Origem"], "", "orange"), ("LT MAX", f"{lt_sem:.0f} sem", f"aprox {lt_meses:.1f}m - {lt_dias}d", lt_cls), ("COB. TARGET", f"{ct_dias:.0f}d", f"aprox {ct_meses:.1f}m - {ct_sem:.1f}sem", ct_cls), ("DEMANDA", info["Demanda"], "", dem_cls), ("EST. FINAL", format_num(est_final), "ultima rev - jun/26", est_cls)]
+
+items = [
+    ("ORIGEM", info["Origem"], "", "orange"),
+    ("LT MAX", f"{lt_sem:.0f} sem", f"aprox {lt_meses:.1f}m - {lt_dias}d", lt_cls),
+    ("COB. TARGET", f"{ct_dias:.0f}d", f"aprox {ct_meses:.1f}m - {ct_sem:.1f}sem", ct_cls),
+    ("DEMANDA", info["Demanda"], "", dem_cls),
+    ("EST. FINAL", format_num(est_final), "ultima rev - jun/26", est_cls),
+]
+
 for i, (lab, val, sub, cls) in enumerate(items):
     with scols[i]:
         struct_box(lab, val, sub, cls, last=(i == len(items) - 1))
+
 st.markdown('</div>', unsafe_allow_html=True)
+
 
 st.markdown('<div class="tab-single"><span>VISAO POR REVISAO</span></div>', unsafe_allow_html=True)
 st.markdown('<div class="review-panel">', unsafe_allow_html=True)
 st.markdown(f'<div class="review-title">REVISAO: <span style="color:var(--accent)">{rev}</span></div>', unsafe_allow_html=True)
+
 cols = st.columns(len(revisoes) + 2, gap="small")
+
 with cols[-2]:
     if st.button("<", use_container_width=True):
         i = max(0, revisoes.index(rev) - 1)
         st.session_state.revisao = revisoes[i]
         st.rerun()
+
 with cols[-1]:
     if st.button(">", use_container_width=True):
         i = min(len(revisoes) - 1, revisoes.index(rev) + 1)
         st.session_state.revisao = revisoes[i]
         st.rerun()
+
 st.markdown('<div class="month-row">', unsafe_allow_html=True)
+
 for i, mes in enumerate(revisoes):
     with cols[i]:
         if st.button(mes, key=f"rev_{mes}", type="primary" if mes == rev else "secondary", use_container_width=True):
             st.session_state.revisao = mes
             st.rerun()
+
 st.markdown('</div></div>', unsafe_allow_html=True)
+
 
 pv_total = pivot["PV"].sum() if "PV" in pivot else 0
 prev_idx = revisoes.index(rev) - 1
+
 if prev_idx >= 0:
-    prev = base_prod[base_prod["Revisao"] == revisoes[prev_idx]].pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum").reindex(MESES)
+    prev = (
+        base_prod[base_prod["Revisao"] == revisoes[prev_idx]]
+        .pivot_table(index="Mes", columns="Variavel", values="Valor", aggfunc="sum")
+        .reindex(MESES)
+    )
+
     var_pv = (pivot.set_index("Mes")["PV"] - prev["PV"]) / prev["PV"].replace(0, np.nan)
     meses_acima = int((var_pv.abs() > .10).sum())
     delta_total = (pv_total - prev["PV"].sum()) / prev["PV"].sum()
@@ -396,76 +726,240 @@ else:
     meses_acima = 0
     delta_txt = "base"
 
+
 c1, c2, c3, c4 = st.columns(4)
+
 with c1:
     metric_card("REVISAO", rev, "", accent=True)
+
 with c2:
     metric_card("PV TOTAL", short_num(pv_total), delta_txt)
+
 with c3:
     metric_card("MESES >10%", f"{meses_acima}m", "", danger=meses_acima >= 5)
+
 with c4:
     metric_card("EST. FINAL", format_num(est_final), "jun/2026", danger=est_final < 0)
 
+
+show_triggers = st.toggle("Mostrar gatilhos no gráfico", value=False)
+
+if show_triggers and not monthly_triggers.empty:
+    red_count = int((monthly_triggers["Nível"] == "vermelho").sum())
+    yellow_count = int((monthly_triggers["Nível"] == "amarelo").sum())
+
+    st.markdown(
+        f'''
+        <div class="trigger-pills">
+            <span class="trigger-pill-red">🔴 Alerta vermelho&nbsp; <strong>{red_count}</strong></span>
+            <span class="trigger-pill-yellow">🟡 Alerta amarelo&nbsp; <strong>{yellow_count}</strong></span>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+
 st.markdown(f'<div class="section-title">PV - PRODUCAO - ESTOQUE - {rev.upper()}</div>', unsafe_allow_html=True)
 st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+
 fig = go.Figure()
-for var, color, dash, name in [("PV", "#5b9cff", "solid", "PV (Sell In)"), ("Producao", "#45c49b", "dash", "Producao"), ("Estoque", "#e7895e", "dot", "Estoque")]:
+
+for var, color, dash, name in [
+    ("PV", "#5b9cff", "solid", "PV (Sell In)"),
+    ("Producao", "#45c49b", "dash", "Producao"),
+    ("Estoque", "#e7895e", "dot", "Estoque"),
+]:
     if var in pivot:
-        fig.add_trace(go.Scatter(x=pivot["Mes"], y=pivot[var], mode="lines+markers", name=name, line=dict(width=3, color=color, dash=dash), marker=dict(size=7), hovertemplate=f"{name}: %{{y:,.0f}}<extra></extra>"))
+        fig.add_trace(
+            go.Scatter(
+                x=pivot["Mes"],
+                y=pivot[var],
+                mode="lines+markers",
+                name=name,
+                line=dict(width=3, color=color, dash=dash),
+                marker=dict(size=7),
+                hovertemplate=f"{name}: %{{y:,.0f}}<extra></extra>",
+            )
+        )
+
 if rev in MESES:
     fig.add_vline(x=rev, line_width=1.5, line_dash="dash", line_color="#6b7280")
-fig.update_layout(paper_bgcolor="#101010", plot_bgcolor="#101010", font=dict(color="#9ca3af", size=13), height=430, margin=dict(l=30, r=18, t=18, b=35), legend=dict(orientation="h", y=-.22, x=.20, font=dict(size=14, color="#cfd4dc")), xaxis=dict(gridcolor="#202020", zerolinecolor="#202020"), yaxis=dict(gridcolor="#202020", zerolinecolor="#202020"), hovermode="x unified", hoverlabel=dict(bgcolor="#171717", bordercolor="#2a2a2a", font=dict(color="#f5f5f5", size=13)))
+
+if show_triggers and not monthly_triggers.empty:
+    for _, row in monthly_triggers.iterrows():
+        mes = row["Mês"]
+        y_val = row["PV"] if pd.notna(row["PV"]) else 0
+
+        fig.add_vline(
+            x=mes,
+            line_width=1.8,
+            line_dash="dash",
+            line_color=row["Cor"],
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=[mes],
+                y=[y_val],
+                mode="markers",
+                name=row["Tipo"],
+                marker=dict(
+                    size=18,
+                    color="rgba(0,0,0,0)",
+                    line=dict(width=4, color=row["Cor"]),
+                ),
+                showlegend=False,
+                hovertemplate=(
+                    f"<b>{mes}</b><br>"
+                    f"{row['Tipo']}<br>"
+                    f"{row['Detalhe']}<br>"
+                    f"PV: {format_num(row['PV'])}<br>"
+                    f"Produção: {format_num(row['Produção'])}<br>"
+                    f"Estoque: {format_num(row['Estoque'])}"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+fig.update_layout(
+    paper_bgcolor="#101010",
+    plot_bgcolor="#101010",
+    font=dict(color="#9ca3af", size=13),
+    height=430,
+    margin=dict(l=30, r=18, t=18, b=35),
+    legend=dict(
+        orientation="h",
+        y=-.22,
+        x=.20,
+        font=dict(size=14, color="#cfd4dc"),
+    ),
+    xaxis=dict(gridcolor="#202020", zerolinecolor="#202020"),
+    yaxis=dict(gridcolor="#202020", zerolinecolor="#202020"),
+    hovermode="x unified",
+    hoverlabel=dict(
+        bgcolor="#171717",
+        bordercolor="#2a2a2a",
+        font=dict(color="#f5f5f5", size=13),
+    ),
+)
+
 st.plotly_chart(fig, use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown(f'<div class="section-title">GATILHOS AUTOMATICOS - PRODUTO {produto} - {rev.upper()}</div>', unsafe_allow_html=True)
-if triggers["severidade"] == "severo":
-    st.markdown(f'<div class="alert-box" title="{triggers["tooltip"]}"><strong>🔴 Excesso severo:</strong> {triggers["descricao"]}</div>', unsafe_allow_html=True)
-elif triggers["severidade"] == "moderado":
-    st.markdown(f'<div class="warn-box" title="{triggers["tooltip"]}"><strong>🟡 Excesso moderado:</strong> {triggers["descricao"]}</div>', unsafe_allow_html=True)
-else:
-    st.markdown(f'<div class="success-box" title="{triggers["tooltip"]}"><strong>🟢 Sem gatilho crítico:</strong> {triggers["descricao"]}</div>', unsafe_allow_html=True)
 
-if not triggers["alert_table"].empty:
-    display_alerts = triggers["alert_table"].copy()
-    for col in ["PV", "Produção", "Estoque"]:
-        display_alerts[col] = display_alerts[col].map(lambda x: "-" if pd.isna(x) else format_num(x))
-    st.dataframe(display_alerts, use_container_width=True)
-else:
-    st.info("Nenhum mês do horizonte disparou alerta de excesso pela regra da Sprint 4.")
+if show_triggers:
+    st.markdown('<div class="section-title">GATILHOS DETECTADOS NESTE PRODUTO</div>', unsafe_allow_html=True)
+
+    if monthly_triggers.empty:
+        st.info("Nenhum gatilho detectado para esta revisão.")
+    else:
+        display_alerts = monthly_triggers[["Mês", "Tipo", "Detalhe", "PV", "Produção", "Estoque"]].copy()
+
+        display_alerts["Tipo"] = display_alerts["Tipo"].map(
+            lambda x: "🔴 Alerta vermelho" if "vermelho" in x else "🟡 Alerta amarelo"
+        )
+
+        for col in ["PV", "Produção", "Estoque"]:
+            display_alerts[col] = display_alerts[col].map(
+                lambda x: "-" if pd.isna(x) else format_num(x)
+            )
+
+        st.dataframe(display_alerts, use_container_width=True, hide_index=True)
+        st.caption(
+            "Regras: 🔴 cobertura < 50% do target · 🟡 cobertura entre 50–75% do target. "
+            "Esta seção apenas detecta e explica, sem sugerir ações."
+        )
+
 
 st.markdown(f'<div class="section-title">CONCLUSAO - PRODUTO {produto} - {rev.upper()}</div>', unsafe_allow_html=True)
+
 alerts = []
+
 if est_final < 0:
     alerts.append(("alert-box", "Ruptura projetada", "estoque final negativo em jun/26."))
+
 if lt_dias > ct_dias:
-    alerts.append(("alert-box", "Risco estrutural", f"LT ({lt_dias}d) maior que Cobertura Target ({ct_dias:.0f}d). Demanda surpresa nao pode ser respondida a tempo."))
+    alerts.append((
+        "alert-box",
+        "Risco estrutural",
+        f"LT ({lt_dias}d) maior que Cobertura Target ({ct_dias:.0f}d). Demanda surpresa nao pode ser respondida a tempo.",
+    ))
+
 if meses_acima > 0:
-    alerts.append(("warn-box", "Revisao instavel", f"{meses_acima} meses tiveram variacao de PV superior a 10% vs revisao anterior."))
+    alerts.append((
+        "warn-box",
+        "Revisao instavel",
+        f"{meses_acima} meses tiveram variacao de PV superior a 10% vs revisao anterior.",
+    ))
+
 if not alerts:
     alerts.append(("success-box", "OK", "Forecast estavel, sem alerta critico nos parametros atuais."))
+
 for cls, t, msg in alerts:
     st.markdown(f'<div class="{cls}"><strong>{t}:</strong> {msg}</div>', unsafe_allow_html=True)
 
+
 st.markdown('<div class="section-title">VARIACAO VS MES ANTERIOR</div>', unsafe_allow_html=True)
+
 if prev_idx >= 0 and prev is not None:
     atual = pivot.set_index("Mes")[[c for c in ["PV", "Producao", "Estoque"] if c in pivot]]
     anterior = prev[[c for c in ["PV", "Producao", "Estoque"] if c in prev]]
     tab = ((atual - anterior) / anterior.replace(0, np.nan) * 100).round(1).reset_index()
+
     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+
     fig_var = go.Figure()
-    for col, color, name in [("PV", "#5b9cff", "PV"), ("Producao", "#45c49b", "Produção"), ("Estoque", "#e7895e", "Estoque")]:
+
+    for col, color, name in [
+        ("PV", "#5b9cff", "PV"),
+        ("Producao", "#45c49b", "Produção"),
+        ("Estoque", "#e7895e", "Estoque"),
+    ]:
         if col in tab:
-            fig_var.add_trace(go.Bar(x=tab["Mes"], y=tab[col], name=name, marker_color=color, hovertemplate=f"{name}: %{{y:.1f}}%<extra></extra>"))
+            fig_var.add_trace(
+                go.Bar(
+                    x=tab["Mes"],
+                    y=tab[col],
+                    name=name,
+                    marker_color=color,
+                    hovertemplate=f"{name}: %{{y:.1f}}%<extra></extra>",
+                )
+            )
+
     fig_var.add_hline(y=0, line_width=1, line_color="#6b7280")
     fig_var.add_hline(y=10, line_width=1, line_dash="dash", line_color="#facc15")
     fig_var.add_hline(y=-10, line_width=1, line_dash="dash", line_color="#facc15")
-    fig_var.update_layout(paper_bgcolor="#101010", plot_bgcolor="#101010", font=dict(color="#9ca3af", size=13), height=330, margin=dict(l=30, r=18, t=18, b=35), barmode="group", legend=dict(orientation="h", y=-.25, x=.25, font=dict(size=14, color="#cfd4dc")), xaxis=dict(gridcolor="#202020", zerolinecolor="#202020"), yaxis=dict(title="Variação %", gridcolor="#202020", zerolinecolor="#202020"), hovermode="x unified", hoverlabel=dict(bgcolor="#171717", bordercolor="#2a2a2a", font=dict(color="#f5f5f5", size=13)))
+
+    fig_var.update_layout(
+        paper_bgcolor="#101010",
+        plot_bgcolor="#101010",
+        font=dict(color="#9ca3af", size=13),
+        height=330,
+        margin=dict(l=30, r=18, t=18, b=35),
+        barmode="group",
+        legend=dict(
+            orientation="h",
+            y=-.25,
+            x=.25,
+            font=dict(size=14, color="#cfd4dc"),
+        ),
+        xaxis=dict(gridcolor="#202020", zerolinecolor="#202020"),
+        yaxis=dict(title="Variação %", gridcolor="#202020", zerolinecolor="#202020"),
+        hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor="#171717",
+            bordercolor="#2a2a2a",
+            font=dict(color="#f5f5f5", size=13),
+        ),
+    )
+
     st.plotly_chart(fig_var, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
     st.dataframe(tab, use_container_width=True)
+
 else:
     st.info("Revisão base: não existe mês anterior para comparar.")
+
 
 with st.expander("Ver dados extraídos"):
     st.dataframe(base_prod, use_container_width=True)
