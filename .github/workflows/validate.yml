@@ -1,7 +1,7 @@
 name: Validar painel Smart Launch
 on:
   push:
-    branches: [main, feature/smartlaunch-metodologia-final]
+    branches: [main, feature/smartlaunch-metodologia-final, feature/painel-4-areas]
   pull_request:
 jobs:
   syntax:
@@ -14,3 +14,4 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m py_compile app.py smartlaunch_app.py
       - run: python tests/test_smoke.py
+      - run: python tests/test_ui.py
