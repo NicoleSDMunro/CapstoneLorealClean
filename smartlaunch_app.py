@@ -239,6 +239,7 @@ def fmt(n):return f"{n:,.0f}".replace(",",".")
 
 st.title("SMART LAUNCH")
 st.caption("L'Oréal | Apoio à decisão de Supply Chain em lançamentos · Metodologia final do TCC")
+st.caption("Versão do painel: 2026.11.09-r3 · Leitor de revisões auditado")
 file=st.file_uploader("Carregue o Triangulo_Produtos_V2.xlsx da L'Oréal (os dados permanecem nesta sessão)",type=["xlsx"])
 if file is None:
     st.info("Envie a planilha original com as abas PRODUTO 1–3, benchmarks e Base. O painel não utiliza dados demonstrativos inventados.")
@@ -251,7 +252,15 @@ except Exception as exc:
 p=st.selectbox("Produto",list(MODEL),format_func=lambda x:f"{x} · {MODEL[x]} · {SHEETS[x]}")
 sheet=SHEETS[p]
 revlist=sorted(set(blocks[sheet]["PV"].index)&set(blocks[sheet]["PROD"].index)&set(blocks[sheet]["EST"].index))
-if not revlist:st.error("Nenhuma revisão com os três blocos completos.");st.stop()
+if not revlist:
+    st.error("O painel não encontrou revisões coincidentes entre PV, produção e estoque.")
+    detail={k:{"revisões":len(blocks[sheet].get(k,[])),
+               "primeira":label(min(blocks[sheet][k].index)) if k in blocks[sheet] and not blocks[sheet][k].empty else "-",
+               "última":label(max(blocks[sheet][k].index)) if k in blocks[sheet] and not blocks[sheet][k].empty else "-"}
+            for k in ("PV","PROD","EST")}
+    st.json(detail)
+    st.info("Se o código da versão acima não aparecer, a hospedagem ainda está usando uma versão anterior. No Streamlit Community Cloud, abra Manage app → Reboot app e verifique se a branch é main.")
+    st.stop()
 review=st.select_slider("Versão do plano disponível (mês seguinte ao fechamento)",options=revlist,value=revlist[-1],format_func=label)
 c=review-1
 st.caption(f"Fechamento: {label(c)} · revisão usada: {label(review)} · modelo fixo: {MODEL[p]}")
