@@ -51,7 +51,10 @@ def parse_blocks(ws):
             if kind and ("ESTOQUE" in s or "PRODU" in s or s.startswith("PV")):
                 blocks.setdefault(kind,{})
             if s=="MES/ANO":
-                header={j:period(x) for j,x in enumerate(row) if period(x) is not None}
+                parsed={j:period(x) for j,x in enumerate(row) if period(x) is not None}
+                # A linha seguinte também se chama Mes/Ano, mas traz descrições.
+                # Não apagar os meses do cabeçalho válido.
+                if parsed: header=parsed
             continue
         if p is not None and kind and header:
             blocks[kind][p]={m:float(row[j] or 0) for j,m in header.items() if j<len(row) and isinstance(row[j],(int,float))}
