@@ -285,7 +285,7 @@ items=[]
 for j,m in enumerate(res["months"]):
     warning=bool(valid[j] and (ex[j]>.025 or ru[j]>.025))
     if not warning: action="Monitoramento"
-    elif ex[j]>.025 and any((k>=ltm and k<=j and res["production"][k]>0) for k in range(len(res["months"])): action="Fornecedor"
+    elif ex[j]>.025 and any((k>=ltm and k<=j and res["production"][k]>0) for k in range(len(res["months"]))): action="Fornecedor"
     elif ex[j]>.025:action="Comercial"
     elif ru[j]>.025 and any(k>=ltm and k<=j and res["production"][k]>0 for k in range(len(res["months"]))):action="Fornecedor"
     else:action="Monitoramento / alocação"
