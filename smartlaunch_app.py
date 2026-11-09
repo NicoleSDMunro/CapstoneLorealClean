@@ -79,7 +79,6 @@ def read_base(wb):
             if result:return result
     raise ValueError("Não foi possível encontrar LT e cobertura por produto na aba Base.")
 
-@st.cache_data(show_spinner=False)
 def load_data(content):
     wb=openpyxl.load_workbook(io.BytesIO(content),read_only=True,data_only=True)
     missing=[s for s in list(SHEETS.values())+sorted(set(sum(ANALOG.values(),[]))) if s not in wb.sheetnames]
@@ -241,7 +240,7 @@ def fmt(n):return f"{n:,.0f}".replace(",",".")
 # A interface é separada dos cálculos: dados -> previsão -> cenários -> riscos -> ação.
 st.title("SMART LAUNCH")
 st.caption("L'Oréal | Inteligência de abastecimento para novos lançamentos")
-st.caption("Versão 2026.11.09 · Painel operacional (4 áreas) | Piloto acadêmico, decisões sob validação humana")
+st.caption("Versão 2026.11.09-r5 · Leitura sem cache · Painel operacional (4 áreas)")
 
 with st.sidebar:
     st.markdown("### Smart Launch")
@@ -323,6 +322,8 @@ with tab_data:
                        "Revisões compatíveis":len(intersection)})
     st.markdown("#### Auditoria do triângulo")
     st.dataframe(pd.DataFrame(checks),hide_index=True,use_container_width=True)
+    if any(row["Revisões compatíveis"] == 0 for row in checks):
+        st.warning("A leitura encontrou revisões vazias. Confira a versão r5 acima; o processamento desta versão não usa cache.")
 
 controls=st.columns([1,2])
 with controls[0]:
