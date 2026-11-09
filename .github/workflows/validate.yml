@@ -1,7 +1,7 @@
 name: Validar painel Smart Launch
 on:
   push:
-    branches: [main, feature/smartlaunch-metodologia-final]
+    branches: [main, feature/smartlaunch-metodologia-final, feature/painel-4-areas]
   pull_request:
 jobs:
   syntax:
