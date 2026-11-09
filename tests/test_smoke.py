@@ -35,7 +35,7 @@ for name in list(ns["SHEETS"].values())+sorted(set(sum(ns["ANALOG"].values(),[])
     ws=wb.create_sheet(name)
     offset=18000 if "BENCH" in name else 40000
     for kind in ("PV (SELL IN)","PRODUÇÃO","ESTOQUE"):
-        ws.append([kind]);ws.append(["Mes/Ano"]+[lab(m) for m in months]);ws.append([None])
+        ws.append([kind]);ws.append(["Mes/Ano"]+[lab(m) for m in months]);ws.append(["Mes/Ano"]+["Demanda + Plano DataM" for _ in months])
         for ridx,review in enumerate(revmonths):
             if kind=="PV (SELL IN)":v=[(0 if "BENCH" not in name and i<5 else offset*(1+0.03*i)) for i in range(24)]
             elif kind=="PRODUÇÃO":v=[50000 for i in range(24)]
@@ -44,6 +44,8 @@ for name in list(ns["SHEETS"].values())+sorted(set(sum(ns["ANALOG"].values(),[])
 buf=io.BytesIO();wb.save(buf)
 base,blocks=load_data(buf.getvalue())
 assert len(blocks)==8,(len(blocks),blocks.keys())
+for name in ns["SHEETS"].values():
+    assert all(len(blocks[name][k].index)>0 for k in ("PV","PROD","EST")),name
 for product in ("P1","P2","P3"):
     origin=pd.Period("2025-10",freq="M")
     fc=forecast(product,[origin+1,origin+2,origin+3],origin,blocks)
