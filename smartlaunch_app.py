@@ -237,143 +237,276 @@ def impacts(res,p,new_plan,baseline):
 
 def fmt(n):return f"{n:,.0f}".replace(",",".")
 
+
+# A interface é separada dos cálculos: dados -> previsão -> cenários -> riscos -> ação.
 st.title("SMART LAUNCH")
-st.caption("L'Oréal | Apoio à decisão de Supply Chain em lançamentos · Metodologia final do TCC")
-st.caption("Versão do painel: 2026.11.09-r3 · Leitor de revisões auditado")
-file=st.file_uploader("Carregue o Triangulo_Produtos_V2.xlsx da L'Oréal (os dados permanecem nesta sessão)",type=["xlsx"])
-if file is None:
-    st.info("Envie a planilha original com as abas PRODUTO 1–3, benchmarks e Base. O painel não utiliza dados demonstrativos inventados.")
-    st.stop()
-try:base,blocks=load_data(file.getvalue())
-except Exception as exc:
-    st.error(f"Erro de leitura: {exc}")
-    st.stop()
+st.caption("L'Oréal | Inteligência de abastecimento para novos lançamentos")
+st.caption("Versão 2026.11.09 · Painel operacional (4 áreas) | Piloto acadêmico, decisões sob validação humana")
 
-p=st.selectbox("Produto",list(MODEL),format_func=lambda x:f"{x} · {MODEL[x]} · {SHEETS[x]}")
-sheet=SHEETS[p]
-revlist=sorted(set(blocks[sheet]["PV"].index)&set(blocks[sheet]["PROD"].index)&set(blocks[sheet]["EST"].index))
-if not revlist:
-    st.error("O painel não encontrou revisões coincidentes entre PV, produção e estoque.")
-    detail={k:{"revisões":len(blocks[sheet].get(k,[])),
-               "primeira":label(min(blocks[sheet][k].index)) if k in blocks[sheet] and not blocks[sheet][k].empty else "-",
-               "última":label(max(blocks[sheet][k].index)) if k in blocks[sheet] and not blocks[sheet][k].empty else "-"}
-            for k in ("PV","PROD","EST")}
-    st.json(detail)
-    st.info("Se o código da versão acima não aparecer, a hospedagem ainda está usando uma versão anterior. No Streamlit Community Cloud, abra Manage app → Reboot app e verifique se a branch é main.")
-    st.stop()
-review=st.select_slider("Versão do plano disponível (mês seguinte ao fechamento)",options=revlist,value=revlist[-1],format_func=label)
-c=review-1
-st.caption(f"Fechamento: {label(c)} · revisão usada: {label(review)} · modelo fixo: {MODEL[p]}")
-tab1,tab2,tab3=st.tabs(["Visão operacional","Cenários e lotes","Metodologia e auditoria"])
 with st.sidebar:
-    st.header("Premissas do estudo")
-    method=st.selectbox("Distribuição dos erros",["Normal (0, s)","Bootstrap centralizado"])
-    persistent=st.checkbox("Erro persistente (sensibilidade)",value=False)
-    st.write("1.000 trajetórias · semente fixa")
-    st.write("Faixa P2,5–P97,5 · excesso ≥ 180 dias")
-    st.caption("Alterações são análises de sensibilidade, não mudanças automáticas da metodologia.")
+    st.markdown("### Smart Launch")
+    st.caption("Um fechamento por vez. Sem usar informação futura.")
+    st.divider()
+    st.caption("**Metodologia fixa**")
+    st.write("P1 · MEA-P")
+    st.write("P2 · MEA (provisório)")
+    st.write("P3 · Oficial")
+    st.caption("1.000 cenários · Normal(0,s) · 180 dias")
+    st.divider()
+    st.caption("Dados empresariais: evite hospedagem pública sem controle de acesso.")
 
-try:res=simulate(p,c,blocks,base,method,persistent)
-except Exception as exc:
-    st.warning(f"Simulação indisponível neste fechamento: {exc}")
-    try:
-        pv=blocks[sheet]["PV"]
-        future=[m for m in sorted(pv.columns) if m>c]
-        if future:
-            f=forecast(p,future,c,blocks)
-            with tab1:
-                st.subheader("Previsão central (sem intervalo probabilístico)")
-                st.dataframe(pd.DataFrame({"Mês":[label(m) for m in future],"Previsão (un.)":np.round(f)}),hide_index=True,use_container_width=True)
-    except Exception as sub:st.error(f"Previsão indisponível: {sub}")
+# Iniciar na visão geral, mas oferecer a atualização em uma área dedicada.
+tab_overview, tab_decisions, tab_data, tab_method = st.tabs(
+    ["📊 Visão geral", "🎛️ Simulador de decisões", "📥 Atualização de dados", "📚 Metodologia e histórico"]
+)
+file = st.session_state.get("triangulo_file_bytes")
+file_label = st.session_state.get("triangulo_file_name","")
+with tab_data:
+    st.subheader("1 · Atualização mensal")
+    st.write("Carregue uma versão atualizada do triângulo. Escolha o produto e o fechamento; o sistema utiliza a revisão do mês seguinte.")
+    uploaded=st.file_uploader("Arquivo Excel — Triangulo Produtos V2.xlsx",type=["xlsx"],key="triangulo_upload")
+    if uploaded is not None:
+        candidate=uploaded.getvalue()
+        if candidate != st.session_state.get("triangulo_file_bytes"):
+            st.session_state["triangulo_file_bytes"]=candidate
+            st.session_state["triangulo_file_name"]=uploaded.name
+            st.session_state.pop("smartlaunch_review",None)
+        file=candidate
+        file_label=uploaded.name
+    if file is not None:
+        st.success(f"Arquivo carregado na sessão: {file_label} · {len(file)/1024:.0f} KB")
+    else:
+        st.info("Nenhum arquivo carregado. Após selecionar o Excel, a visão geral será preenchida.")
+with tab_overview:
+    if file is None:
+        st.info("Para começar: abra **📥 Atualização de dados**, carregue o triângulo e selecione um fechamento.")
+with tab_decisions:
+    if file is None:
+        st.info("Primeiro, carregue o triângulo na aba **Atualização de dados**.")
+with tab_method:
+    st.subheader("Como o painel decide")
+    st.markdown("""
+    **Fluxo:** validar dados → prever demanda → simular 1.000 cenários → calcular estoque/cobertura → detectar alertas → testar ações.
+
+    - **Modelo fixo por produto:** P1 = MEA-P; P2 = MEA (provisório); P3 = Oficial. O painel não escolhe um modelo vencedor a cada mês.
+    - **Incerteza padrão:** erro aditivo Normal(0, desvio-padrão amostral dos erros do arranque); demanda limitada a zero.
+    - **Estoque:** \`max(0, estoque anterior + produção − demanda)\`. A venda que não couber no estoque é perdida.
+    - **Cobertura:** forward cover, consumindo a demanda dos próximos meses; após a última projeção, repete-se o último mês.
+    - **Excesso:** P97,5 da cobertura ≥ 180 dias. **Ruptura:** P97,5 da venda perdida > 0.
+    - **Janela crítica:** \`ceil(LT em semanas × 7/30) + ceil(cobertura-alvo/30) + 1\` mês.
+    - **Ações em lotes:** testes teóricos com lead time; contratos, lotes mínimos e disponibilidade não estão modelados.
+    """)
+    st.warning("A simulação usa poucos erros de previsões sobrepostas. As probabilidades não são garantias nem equivalem a intervalos estatísticos calibrados.")
+    st.caption("Método de previsão, risco e gatilhos: TCC Smart Launch, novembro/2026. A apresentação em quatro áreas é uma decisão de interface.")
+
+if file is None:
     st.stop()
 
-q=lambda x:np.percentile(x,[2.5,50,97.5],axis=0)
-dp=q(res["dm"]);ep=q(res["stock"]);cp=q(res["cov"])
-ex=(res["cov"]>=LIM).mean(axis=0)
-ru=(res["lost"]>0).mean(axis=0)
-valid=res["active"]
-baseimpact=impacts(res,p,res["production"],{"excesso":0.0,"ruptura":0.0})
-ltm=res["ltm"];window=res["window"]
-items=[]
-for j,m in enumerate(res["months"]):
-    warning=bool(valid[j] and (ex[j]>.025 or ru[j]>.025))
-    if not warning: action="Monitoramento"
-    elif ex[j]>.025 and any((k>=ltm and k<=j and res["production"][k]>0) for k in range(len(res["months"]))): action="Fornecedor"
-    elif ex[j]>.025:action="Comercial"
-    elif ru[j]>.025 and any(k>=ltm and k<=j and res["production"][k]>0 for k in range(len(res["months"]))):action="Fornecedor"
-    else:action="Monitoramento / alocação"
-    items.append({"Mês":label(m),"Previsão":round(res["center"][j]),"P2,5":round(dp[0,j]),"P50":round(dp[1,j]),"P97,5":round(dp[2,j]),
-                  "Estoque P50":round(ep[1,j]),"Cobertura P50 (dias)":round(cp[1,j]),
-                  "P(excesso)":round(float(ex[j])*100,1),"P(ruptura)":round(float(ru[j])*100,1),
-                  "Janela crítica":"Sim" if valid[j] else "Não","Encaminhamento":action})
-df=pd.DataFrame(items)
-with tab1:
-    a,b,d,e=st.columns(4)
-    a.metric("Modelo",MODEL[p]);b.metric("Lead time",f"{ltm} meses")
-    d.metric("Janela crítica",f"{window} meses");e.metric("Sacola de erros",f"{len(res['errors'])} previsões")
-    if p=="P2":st.warning("P2: seleção MEA provisória; histórico de arranque insuficiente para validação conclusiva.")
-    if np.isfinite(np.mean(res["errors"])) and abs(np.mean(res["errors"]))>1e-6:st.caption(f"Viés histórico observado (realizado − previsto): {fmt(np.mean(res['errors']))} unidades. A Normal pressupõe erro médio zero; não elimina o viés.")
-    st.subheader("Previsão e faixa de demanda")
-    labels=[label(m) for m in res["months"]]
-    fig=go.Figure()
-    fig.add_trace(go.Scatter(x=labels,y=dp[2],mode="lines",line=dict(width=0),showlegend=False))
-    fig.add_trace(go.Scatter(x=labels,y=dp[0],mode="lines",fill="tonexty",fillcolor="rgba(236,72,153,.16)",line=dict(width=0),name="P2,5–P97,5"))
-    fig.add_trace(go.Scatter(x=labels,y=res["center"],name=f"Previsão {MODEL[p]}",line=dict(color="#f6b36b",width=3)))
-    fig.add_trace(go.Scatter(x=labels,y=dp[1],name="P50 simulado",line=dict(color="#fff",dash="dot")))
-    fig.update_layout(template="plotly_dark",height=310,margin=dict(l=20,r=20,t=12,b=10),paper_bgcolor="#111",plot_bgcolor="#111")
-    st.plotly_chart(fig,use_container_width=True)
-    st.subheader("Probabilidades e encaminhamento por mês")
-    st.dataframe(df,hide_index=True,use_container_width=True)
-    st.caption("Gatilhos somente na janela crítica: P97,5 da cobertura ≥ 180 dias ou P97,5 da venda perdida > 0. Probabilidades não são garantias; o histórico de ruptura teve alarmes falsos.")
-with tab2:
-    st.subheader("Impacto de alterações nos lotes")
-    st.caption("Somente lotes com mês de entrega além do lead time podem ser modificados no teste. Mesmos cenários de demanda em todas as alternativas.")
-    rows=[]
-    for j,m in enumerate(res["months"]):
-        volume=res["production"][j]
-        if volume<=0:continue
-        eligible=j>=ltm
-        rows.append({"Mês":label(m),"Produção":round(volume),"Prazo teórico":label(m-ltm),
-                     "Alterável pelo LT":"Sim" if eligible else "Não"})
-    lots=pd.DataFrame(rows)
-    if lots.empty:st.info("Não há lotes de produção planejados. Analisar ação comercial e monitoramento.")
-    else:
-        st.dataframe(lots,hide_index=True,use_container_width=True)
-        editable=[j for j,v in enumerate(res["production"]) if v>0 and j>=ltm]
-        if not editable:st.warning("Nenhum lote ainda está fora do lead time. Alterações de fornecedor não são viáveis pelo critério temporal.")
-        else:
-            j=st.selectbox("Lote para avaliação",editable,format_func=lambda k:f"{label(res['months'][k])} · {fmt(res['production'][k])} un.")
-            options={"Manter":None,"Reduzir 25%":-.25,"Reduzir 50%":-.5,"Cancelar":-1.0,"Aumentar 25%":.25,"Adiar 1 mês":"adiar","Antecipar 1 mês":"antecipar"}
-            output=[]
-            for action,delta in options.items():
-                if action=="Manter":plan=res["production"].copy()
-                else:
-                    plan=res["production"].copy()
-                    if delta=="adiar":
-                        if j+1>=len(plan):continue
-                        plan[j]=0;plan[j+1]+=res["production"][j]
-                    elif delta=="antecipar":
-                        if j-1<ltm:continue
-                        plan[j]=0;plan[j-1]+=res["production"][j]
-                    else:plan[j]*=1+delta
-                met=impacts(res,p,plan,baseimpact)
-                output.append({"Alternativa":action,"P(excesso na janela)":f"{met['excesso']:.1%}","P(ruptura na janela)":f"{met['ruptura']:.1%}",
-                               "Δ excesso (p.p.)":round(100*met["delta_excesso"],1),"Δ ruptura (p.p.)":round(100*met["delta_ruptura"],1)})
-            st.dataframe(pd.DataFrame(output),hide_index=True,use_container_width=True)
-            st.caption("As mudanças são cenários hipotéticos: não validam contratos, lote mínimo ou capacidade produtiva. Não há otimização automática.")
-with tab3:
-    st.subheader("Rastreabilidade")
-    st.write("Origem rolante: no fechamento c só é usado o realizado do mês m registrado na revisão m+1, com m ≤ c.")
-    st.write("P1: MEA-P; P2: MEA (provisório); P3: Oficial. A seleção de modelos foi fixada no estudo, não reotimizada no painel.")
-    st.write("MEA e MEA-P: média em log10 das séries expandidas pelos análogos; MEA-P ajusta o pipe M1–M3.")
-    st.write("Simulação padrão: demanda = max(0, previsão + Normal(0,s)); s amostral da sacola de erros do arranque; 1.000 trajetórias.")
-    st.write("Estoque: max(0, estoque anterior + produção − demanda), com vendas não atendidas perdidas; cobertura pelo consumo futuro.")
-    st.write("Parâmetros: 180 dias (L'Oréal); LT da aba Base; janela = ceil(LT×7/30) + ceil(cobertura alvo/30) + 1.")
-    st.write("Limitações: amostra pequena, erros sobrepostos, Normal não comprovada, plano termina em dezembro/2026, operacionalidade dos lotes não confirmada.")
-    st.caption("O painel é um instrumento de apoio, não uma liberação de ordem de compra/produção. As decisões exigem validação humana.")
-    with st.expander("Sacola de erros conhecida neste fechamento"):
-        st.dataframe(pd.DataFrame({"Erro (un.)":res["errors"]}),hide_index=True)
-    st.download_button("Baixar análise mensal (CSV)",df.to_csv(index=False).encode("utf-8-sig"),file_name=f"smartlaunch_{p}_{c}.csv",mime="text/csv")
+try:
+    base,blocks=load_data(file)
+except Exception as exc:
+    with tab_data:
+        st.error(f"Não foi possível ler o arquivo: {exc}")
+        st.caption("Esperado: Base, PRODUTO 1–3, BENCH A_1, BENCH B_1, BENCH C_2, BENCH D_3, BENCH E_3.")
+    st.stop()
 
-# Diagnóstico da versão de dados: não utilizar informações de revisões futuras.
-# Os testes automatizados verificam leitura, previsão e simulação em todas as famílias de produto.
+# Auditoria exibida antes do processamento, para facilitar erros de cada revisão.
+with tab_data:
+    checks=[]
+    for pkey,sheet_name in SHEETS.items():
+        b=blocks.get(sheet_name,{})
+        indices={k:set(b[k].index) if k in b else set() for k in ("PV","PROD","EST")}
+        intersection=set.intersection(*indices.values())
+        checks.append({"Produto":pkey,"Vendas (revisões)":len(indices["PV"]),
+                       "Produção (revisões)":len(indices["PROD"]),
+                       "Estoque (revisões)":len(indices["EST"]),
+                       "Revisões compatíveis":len(intersection)})
+    st.markdown("#### Auditoria do triângulo")
+    st.dataframe(pd.DataFrame(checks),hide_index=True,use_container_width=True)
+
+controls=st.columns([1,2])
+with controls[0]:
+    p=st.selectbox("Produto",list(MODEL),format_func=lambda x:f"{x} · {MODEL[x]}",key="smartlaunch_product")
+sheet=SHEETS[p]
+data=blocks[sheet]
+revlist=sorted(set(data["PV"].index)&set(data["PROD"].index)&set(data["EST"].index))
+if not revlist:
+    with tab_data:
+        st.error(f"Não há revisões compatíveis para {p}. Examine a auditoria acima.")
+    st.stop()
+with controls[1]:
+    # Só revisões com estoque de fechamento na coluna anterior e meses futuros no plano.
+    validrevs=[r for r in revlist if r-1 in data["EST"].columns and any(m>r-1 for m in data["PV"].columns)]
+    options=validrevs or revlist
+    if "smartlaunch_review" in st.session_state and st.session_state["smartlaunch_review"] not in options:
+        del st.session_state["smartlaunch_review"]
+    review=st.selectbox("Revisão do plano (fechamento do mês anterior)",options,index=len(options)-1,
+                        format_func=label,key="smartlaunch_review")
+c=review-1
+
+with tab_data:
+    d1,d2,d3=st.columns(3)
+    d1.metric("Produto",p)
+    d2.metric("Fechamento",label(c))
+    d3.metric("Revisão utilizada",label(review))
+    st.caption("A revisão selecionada deve ter realizado conhecido até o mês anterior. Nenhum arquivo foi enviado ao repositório.")
+    with st.expander("Histórico de vendas conhecido neste fechamento"):
+        st.dataframe(pd.DataFrame({"Mês":[label(m) for m in known(data["PV"],c).index],
+                                   "Vendido":known(data["PV"],c).to_numpy()}),hide_index=True,use_container_width=True)
+
+with tab_method:
+    st.markdown("#### Parâmetros do produto")
+    target,ltweeks=base[p]
+    months_lt=math.ceil(ltweeks*7/30)
+    critical=months_lt+math.ceil(target/30)+1
+    st.write(f"{p}: lead time = {ltweeks:g} semanas ({months_lt} meses arredondados), cobertura-alvo = {target:g} dias; janela crítica = {critical} meses.")
+    st.markdown("#### Sensibilidades — não mudam o modelo central")
+    sim_method=st.selectbox("Distribuição dos erros",["Normal (0, s)","Bootstrap centralizado"],key="sim_method")
+    sim_persistent=st.checkbox("Mesmo erro persistente entre meses",value=False,key="sim_persistent")
+
+# Recalcular cenários no fechamento: toda ação compara a mesma sacola de 1.000 trajetórias.
+try:
+    result=simulate(p,c,blocks,base,sim_method,sim_persistent)
+    issue=None
+except Exception as exc:
+    result=None
+    issue=str(exc)
+
+if result is None:
+    with tab_overview:
+        st.warning(f"Há previsão, mas a simulação não está disponível neste fechamento: {issue}")
+        try:
+            future=[m for m in sorted(data["PV"].columns) if m>c]
+            estimates=forecast(p,future,c,blocks)
+            st.dataframe(pd.DataFrame({"Mês":[label(m) for m in future],
+                                       "Previsão (un.)":np.round(estimates)}),
+                         hide_index=True,use_container_width=True)
+        except Exception as err:
+            st.error(f"Não foi possível gerar previsão: {err}")
+    with tab_decisions:
+        st.warning("Sem cenários probabilísticos suficientes, não é possível comparar alternativas de lotes.")
+    st.stop()
+
+res=result
+labs=[label(m) for m in res["months"]]
+q=lambda v:np.percentile(v,[2.5,50,97.5],axis=0)
+demand=q(res["dm"])
+stock=q(res["stock"])
+cover=q(res["cov"])
+ex=(res["cov"]>=LIM).mean(axis=0)
+rupt=(res["lost"]>0).mean(axis=0)
+active=res["active"]
+ltm=res["ltm"]
+baseline=impacts(res,p,res["production"],{"excesso":0,"ruptura":0})
+action_records=[]
+for j,m in enumerate(res["months"]):
+    triggers=bool(active[j] and (ex[j]>.025 or rupt[j]>.025))
+    supplier_ex=any(k>=ltm and k<=j and res["production"][k]>0 for k in range(len(res["months"])))
+    if not triggers:
+        response="Monitorar"
+    elif ex[j]>.025:
+        response="Fornecedor" if supplier_ex else "Comercial"
+    else:
+        response="Fornecedor" if supplier_ex else "Monitorar / alocar"
+    action_records.append({
+        "Mês":label(m),"Demanda prevista":round(res["center"][j]),
+        "Demanda P2,5":round(demand[0,j]),"Demanda P97,5":round(demand[2,j]),
+        "Estoque P50":round(stock[1,j]),"Cobertura P50 (dias)":round(cover[1,j]),
+        "Excesso (%)":round(100*float(ex[j]),1),"Ruptura (%)":round(100*float(rupt[j]),1),
+        "Janela crítica":"Sim" if active[j] else "Não","Encaminhamento":response})
+monthly=pd.DataFrame(action_records)
+risk_months=monthly[(monthly["Janela crítica"]=="Sim") & ((monthly["Excesso (%)"]>2.5)|(monthly["Ruptura (%)"]>2.5))]
+with tab_overview:
+    st.markdown("#### 2–4 · Previsão, risco e prioridades")
+    m1,m2,m3,m4=st.columns(4)
+    m1.metric("Modelo de previsão",MODEL[p])
+    m2.metric("Estoque inicial",fmt(res["e0"])+" un.")
+    m3.metric("Meses com gatilho",len(risk_months))
+    m4.metric("Erros conhecidos",len(res["errors"]))
+    if p=="P2":
+        st.warning("P2: modelo MEA provisório. A validação no arranque tem amostra insuficiente.")
+    if risk_months.empty:
+        st.success("Não há gatilhos na janela crítica para o fechamento selecionado.")
+    else:
+        primary=risk_months.iloc[0]
+        st.warning(f"Primeiro gatilho: {primary['Mês']} · excesso {primary['Excesso (%)']:.1f}% · ruptura {primary['Ruptura (%)']:.1f}% · encaminhamento: {primary['Encaminhamento']}.")
+    st.caption(f"Fechamento {label(c)} · revisão {label(review)} · janela crítica {res['window']} meses · Normal(0,s) por padrão")
+    st.markdown("#### Demanda prevista e incerteza")
+    figure=go.Figure()
+    figure.add_trace(go.Scatter(x=labs,y=demand[2],mode="lines",line=dict(width=0),hoverinfo="skip",showlegend=False))
+    figure.add_trace(go.Scatter(x=labs,y=demand[0],mode="lines",line=dict(width=0),fill="tonexty",fillcolor="rgba(239,157,75,0.18)",name="Faixa P2,5–P97,5"))
+    figure.add_trace(go.Scatter(x=labs,y=res["center"],mode="lines+markers",name=f"Previsão {MODEL[p]}",line=dict(color="#f2aa58",width=3)))
+    figure.add_trace(go.Scatter(x=labs,y=demand[1],mode="lines",name="P50 cenários",line=dict(color="#d0d0d0",dash="dot")))
+    figure.update_layout(template="plotly_dark",height=320,margin=dict(l=12,r=12,b=20,t=15),paper_bgcolor="#131313",plot_bgcolor="#131313")
+    st.plotly_chart(figure,use_container_width=True)
+    st.markdown("#### Riscos e encaminhamento por mês")
+    display_cols=["Mês","Demanda prevista","Estoque P50","Cobertura P50 (dias)","Excesso (%)","Ruptura (%)","Janela crítica","Encaminhamento"]
+    st.dataframe(monthly[display_cols],hide_index=True,use_container_width=True)
+    st.caption("Gatilhos usam o percentil 97,5; a probabilidade é a fração dos 1.000 cenários. Alertas são apoio à decisão, não previsões certas.")
+
+with tab_decisions:
+    st.subheader("5–6 · Alternativas de abastecimento e plano de ação")
+    st.write(f"Fechamento: **{label(c)}** · Produto: **{p}** · Lead time arredondado: **{ltm} meses**")
+    st.caption("Só lotes fora do lead time são elegíveis pelo critério temporal. A possibilidade contratual de alteração deve ser validada com a L'Oréal.")
+    batches=[]
+    for j,m in enumerate(res["months"]):
+        vol=res["production"][j]
+        if vol<=0:continue
+        batches.append({"Mês":label(m),"Volume (un.)":round(vol),"Prazo teórico":label(m-ltm),
+                        "Disponível pelo LT":"Sim" if j>=ltm else "Não"})
+    if batches:
+        st.dataframe(pd.DataFrame(batches),hide_index=True,use_container_width=True)
+    else:
+        st.info("Nenhum lote de produção futura identificado nesta revisão.")
+    possible=[j for j,v in enumerate(res["production"]) if v>0 and j>=ltm]
+    if not possible:
+        st.warning("Nenhum lote elegível ao ajuste pelo lead time neste fechamento. Avaliar ações comerciais ou monitoramento.")
+    else:
+        chosen=st.selectbox("Escolha o lote a avaliar",possible,
+                            format_func=lambda j:f"{label(res['months'][j])} · {fmt(res['production'][j])} unidades",
+                            key="chosen_batch")
+        variations={"Manter":0,"Reduzir 25%":-0.25,"Reduzir 50%":-0.5,"Cancelar":-1.0,
+                    "Aumentar 25%":0.25,"Adiar 1 mês":"adiar","Antecipar 1 mês":"antecipar"}
+        comparison=[]
+        for action,modifier in variations.items():
+            plan=res["production"].copy()
+            if modifier=="adiar":
+                if chosen+1>=len(plan):continue
+                plan[chosen+1]+=plan[chosen]
+                plan[chosen]=0
+            elif modifier=="antecipar":
+                if chosen-1<ltm:continue
+                plan[chosen-1]+=plan[chosen]
+                plan[chosen]=0
+            else:plan[chosen]*=(1+modifier)
+            metrics=impacts(res,p,plan,baseline)
+            comparison.append({"Alternativa":action,"Risco de excesso":f"{metrics['excesso']:.1%}",
+                               "Risco de ruptura":f"{metrics['ruptura']:.1%}",
+                               "Δ excesso (p.p.)":round(metrics["delta_excesso"]*100,1),
+                               "Δ ruptura (p.p.)":round(metrics["delta_ruptura"]*100,1)})
+        st.markdown("#### Comparação com o plano atual")
+        st.dataframe(pd.DataFrame(comparison),hide_index=True,use_container_width=True)
+        st.caption("Comparação com os mesmos cenários em toda alternativa. Resultados em toda a janela crítica, não apenas no mês selecionado.")
+        st.markdown("#### Explorar ajustes de 5 em 5%")
+        adjustment=st.slider("Ajuste no volume do lote",min_value=-100,max_value=100,value=0,step=5,format="%d%%")
+        alternative=res["production"].copy()
+        alternative[chosen]*=1+adjustment/100
+        compare=impacts(res,p,alternative,baseline)
+        c1,c2=st.columns(2)
+        c1.metric("Excesso na janela",f"{compare['excesso']:.1%}",delta=f"{compare['delta_excesso']*100:+.1f} p.p.",delta_color="inverse")
+        c2.metric("Ruptura na janela",f"{compare['ruptura']:.1%}",delta=f"{compare['delta_ruptura']*100:+.1f} p.p.",delta_color="inverse")
+        st.caption("Não significa corte ótimo nem autorização para modificar a ordem. Confirme capacidade, contratos e lote mínimo.")
+    st.markdown("#### Encaminhamentos indicados pelos gatilhos")
+    if risk_months.empty:st.info("Nenhum encaminhamento emergencial detectado.")
+    else:st.dataframe(risk_months[["Mês","Excesso (%)","Ruptura (%)","Encaminhamento"]],hide_index=True,use_container_width=True)
+    st.warning("A ferramenta não decide pelo planejador. Registre a decisão e confirme com Supply Planning, Comercial e fornecedores, conforme o caso.")
+
+with tab_method:
+    st.markdown("#### Auditoria estatística")
+    st.write(f"Erros disponíveis no fechamento: {len(res['errors'])}; desvio-padrão: {fmt(res['sd'])} unidades; viés amostral: {fmt(np.mean(res['errors']))} unidades.")
+    st.caption("O viés é mostrado, mas não aplicado como correção automática à previsão.")
+    with st.expander("Ver sacola de erros"):
+        st.dataframe(pd.DataFrame({"Erro (un.)":res["errors"]}),hide_index=True,use_container_width=True)
+    st.markdown("#### Exportação")
+    st.download_button("Exportar análise mensal (CSV)",monthly.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"smartlaunch_{p}_{label(c).replace('/','-')}.csv",mime="text/csv")
