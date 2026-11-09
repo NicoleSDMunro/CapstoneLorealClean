@@ -3,7 +3,7 @@ import runpy
 from streamlit.testing.v1 import AppTest
 
 samples=runpy.run_path("tests/test_smoke.py")
-at=AppTest.from_file("app.py",default_timeout=50)
+at=AppTest.from_file("../app.py",default_timeout=50)
 at.run()
 assert not at.exception, [str(e) for e in at.exception]
 assert len(at.tabs)==4, f"Esperadas quatro áreas; obtidas {len(at.tabs)}"
