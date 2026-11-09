@@ -37,7 +37,7 @@ for name in list(ns["SHEETS"].values())+sorted(set(sum(ns["ANALOG"].values(),[])
     for kind in ("PV (SELL IN)","PRODUÇÃO","ESTOQUE"):
         ws.append([kind]);ws.append(["Mes/Ano"]+[lab(m) for m in months]);ws.append([None])
         for ridx,review in enumerate(revmonths):
-            if kind=="PV (SELL IN)":v=[offset*(1+0.03*i) for i in range(24)]
+            if kind=="PV (SELL IN)":v=[(0 if "BENCH" not in name and i<5 else offset*(1+0.03*i)) for i in range(24)]
             elif kind=="PRODUÇÃO":v=[50000 for i in range(24)]
             else:v=[85000 for i in range(24)]
             ws.append([lab(review)]+v)
