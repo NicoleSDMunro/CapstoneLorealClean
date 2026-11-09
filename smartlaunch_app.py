@@ -58,7 +58,7 @@ def parse_blocks(ws):
     return {key:pd.DataFrame.from_dict(v,orient="index").sort_index() for key,v in blocks.items()}
 
 def read_base(wb):
-    if "Base" not in wb.sheetnames:raise ValueError('A planilha precisa ter a aba "Base" com LT e cobertura.')
+    if "Base" not in wb.sheetnames:raise ValueError('Arquivo incompatível: falta a aba "Base". Envie o Triangulo_Produtos_V2.xlsx da metodologia final, não a base antiga A–P.')
     rows=list(wb["Base"].values)
     for row in rows:
         cells=[str(x).strip().lower() if x is not None else "" for x in row]
@@ -80,7 +80,7 @@ def read_base(wb):
 def load_data(content):
     wb=openpyxl.load_workbook(io.BytesIO(content),read_only=True,data_only=True)
     missing=[s for s in list(SHEETS.values())+sorted(set(sum(ANALOG.values(),[]))) if s not in wb.sheetnames]
-    if missing:raise ValueError("Abas ausentes: "+", ".join(missing))
+    if missing:raise ValueError("A planilha não é o Triangulo_Produtos_V2.xlsx do TCC final. Abas ausentes: "+", ".join(missing)+". Não use a Base de Dados - PUC (2).xlsx antiga (A–P).")
     base=read_base(wb)
     missingbase=[p for p in MODEL if p not in base]
     if missingbase:raise ValueError("Sem LT/cobertura na aba Base: "+", ".join(missingbase))
@@ -119,8 +119,9 @@ def pipe_index(blocks,c):
 def forecast(p,months,c,blocks,model=None):
     model=model or MODEL[p]
     sheet=SHEETS[p]; own=known(blocks[sheet]["PV"],c)
-    start=known(blocks[sheet]["PV"],max(blocks[sheet]["PV"].index)).index.min()
-    if start is pd.NaT or start is None:raise ValueError(f"{p}: sem venda realizada.")
+    historical=known(blocks[sheet]["PV"],max(blocks[sheet]["PV"].index))
+    start=historical.index.min() if not historical.empty else None
+    if start is None or pd.isna(start):raise ValueError(f"{p}: sem venda realizada.")
     if model=="Oficial":
         pv=blocks[sheet]["PV"]
         v=c+1
@@ -299,7 +300,7 @@ with tab1:
     a.metric("Modelo",MODEL[p]);b.metric("Lead time",f"{ltm} meses")
     d.metric("Janela crítica",f"{window} meses");e.metric("Sacola de erros",f"{len(res['errors'])} previsões")
     if p=="P2":st.warning("P2: seleção MEA provisória; histórico de arranque insuficiente para validação conclusiva.")
-    if np.mean(res["errors"])!=0:st.caption(f"Viés histórico observado (realizado − previsto): {fmt(np.mean(res['errors']))} unidades. A Normal pressupõe erro médio zero; não elimina o viés.")
+    if np.isfinite(np.mean(res["errors"])) and abs(np.mean(res["errors"]))>1e-6:st.caption(f"Viés histórico observado (realizado − previsto): {fmt(np.mean(res['errors']))} unidades. A Normal pressupõe erro médio zero; não elimina o viés.")
     st.subheader("Previsão e faixa de demanda")
     labels=[label(m) for m in res["months"]]
     fig=go.Figure()
@@ -361,3 +362,6 @@ with tab3:
     with st.expander("Sacola de erros conhecida neste fechamento"):
         st.dataframe(pd.DataFrame({"Erro (un.)":res["errors"]}),hide_index=True)
     st.download_button("Baixar análise mensal (CSV)",df.to_csv(index=False).encode("utf-8-sig"),file_name=f"smartlaunch_{p}_{c}.csv",mime="text/csv")
+
+# Diagnóstico da versão de dados: não utilizar informações de revisões futuras.
+# Os testes automatizados verificam leitura, previsão e simulação em todas as famílias de produto.
