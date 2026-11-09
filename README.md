@@ -1,5 +1,17 @@
 # Smart Launch — Painel Operacional (TCC L'Oréal)
 
+## Navegação — quatro áreas
+
+1. **Visão geral:** previsão do modelo fixo, faixa probabilística, estoque, cobertura, gatilhos e primeiro mês prioritário.
+2. **Simulador de decisões:** lotes alteráveis pelo lead time, efeitos de manter/reduzir/cancelar/adiar/antecipar, ajuste de 5% em 5% e encaminhamento comercial/fornecedor/monitoramento.
+3. **Atualização de dados:** upload do triângulo (sem commit), auditoria PV/produção/estoque, seleção de produto e fechamento e histórico conhecido.
+4. **Metodologia e histórico:** fórmulas, premissas, limitações, sensibilidade Normal × bootstrap centralizado e exportação de resultados.
+
+**Execução:** `streamlit run app.py` e carregar o triângulo atualizado na aba Atualização de dados. O app começa sem números fictícios.
+
+**Importante:** o teste de interface usa planilha sintética e verifica o funcionamento básico, não a calibração nem a paridade numérica com o notebook do TCC. A decisão final continua sendo humana.
+
+
 Aplicativo Streamlit para análise mensal de lançamentos (metodologia consolidada em novembro de 2026).
 
 ## Uso
