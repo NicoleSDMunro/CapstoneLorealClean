@@ -1,3 +1,41 @@
+# Smart Launch — Painel mensal de apoio à decisão (implementação incremental)
+
+## O que está implementado nesta branch
+- Upload do triângulo e leitura das revisões de PV, produção e estoque na **sessão Streamlit**, sem commit de dados empresariais.
+- Seleção de produto e competência; previsões MEA/MEA-P/Oficial e Naive.
+- **Nova aba Modelos:** backtest com origem rolante h1–h3 em pares comparáveis; MAPE, MAE, RMSE, viés, contagem de previsões, origens e meses-alvo; indicação de vencedor experimental.
+- **Modelo operacional separado do vencedor estatístico**: aprovação explícita, com histórico apenas na sessão e opção de restaurar o modelo original.
+- Simulação de 1.000 demandas Normal(0,s) e alternativa bootstrap centralizado, com erros históricos conhecidos; estoque, cobertura futura, probabilidades, gatilhos e simulação de lotes.
+- Exportação CSV dos riscos mensais e auditoria dos blocos por produto.
+
+## Limites importantes antes de homologar com a L'Oréal
+1. **Ranking ainda não é o algoritmo definitivo do notebook**: são quatro candidatos (MEA-P, MEA, Oficial, Naive) e uma elegibilidade complementar (ao menos 3 previsões em 2 origens). A seleção definitiva do TCC tinha 49 modelos e regras específicas. Antes de usar a escolha operacional como evidência, confrontar e substituir este ranking pelo protocolo do `SmartLaunch_TCC_final.ipynb`.
+2. Esta implementação **não possui persistência entre sessões**. A cada execução o usuário deve carregar o Excel novamente; versões passadas devem estar contidas no triângulo carregado. Aprovações registradas em memória não são um registro corporativo.
+3. Ainda não foram implementados controle de acesso, armazenamento privado, trilha de auditoria permanente, relatórios PDF, notificação automática nem onboarding de produtos arbitrários.
+4. Paridade do motor de previsão/risco com o notebook do TCC **não foi certificada**. Não usar em decisões de abastecimento sem homologação.
+5. Alterações em lotes são simulações teóricas e dependem de contratos, capacidades e confirmação da L'Oréal.
+6. O repositório é **público**: nunca commitar dados reais. Mesmo com processamento em memória, o upload trafega pelo servidor Streamlit; use apenas implantação autorizada e protegida para dados reais.
+
+## Rodar
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+python tests/test_smoke.py
+python tests/test_monthly.py
+python tests/test_ui.py
+```
+
+## Atualização mensal
+Carregue o arquivo do novo fechamento na aba **Atualização mensal**. Selecione a revisão e o produto. O sistema recalcula o ranking dos candidatos elegíveis usando apenas alvos realizados até o fechamento selecionado. O modelo operacional aprovado permanece em uso até uma troca expressamente autorizada na aba **Modelos**. A nova previsão alimenta os cenários, os riscos e o simulador de lotes.
+
+## Próximos passos obrigatórios
+- Conectar e validar integralmente o notebook final e seus resultados, especialmente o backtest de 49 modelos, definição do período de arranque e amostragem dos erros.
+- Integrar armazenamento seguro de versões mensais e decisões com autenticação e controle de acesso.
+- Criar visão consolidada de todos os produtos, prazos finais de intervenção, relatório PDF/Excel e avaliação retrospectiva de alertas.
+- Validar novos produtos, novos formatos de arquivo e cobertura de competências após dezembro de 2026.
+
+---
+
 # Smart Launch — Painel Operacional (TCC L'Oréal)
 
 ## Navegação — quatro áreas
