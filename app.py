@@ -1,2 +1,2 @@
-"""Entrada do painel Smart Launch (versão metodologia final)."""
-import smartlaunch_app  # noqa: F401
+"""Entrada da Central de Alertas Smart Launch."""
+import smartlaunch_ui  # noqa: F401
