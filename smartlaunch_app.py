@@ -7,11 +7,13 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import openpyxl
+from smartlaunch_monthly import evaluate_models
+import hashlib
 
 st.set_page_config(page_title="Smart Launch | L'Oréal", page_icon="📦", layout="wide")
 st.markdown("""<style>
-.stApp{background:#090909;color:#f3f3f3}
-[data-testid="stMetric"]{background:#171717;border:1px solid #303030;padding:14px;border-radius:10px}
+ .stApp{background:#f6f7f9;color:#17202a}
+[data-testid="stMetric"]{background:#ffffff;border:1px solid #dce2e8;padding:14px;border-radius:10px}
 h1,h2,h3{letter-spacing:-.03em}
 div[data-testid="stAlert"]{border-radius:8px}
 </style>""",unsafe_allow_html=True)
@@ -124,6 +126,9 @@ def forecast(p,months,c,blocks,model=None):
     historical=known(blocks[sheet]["PV"],max(blocks[sheet]["PV"].index))
     start=historical.index.min() if not historical.empty else None
     if start is None or pd.isna(start):raise ValueError(f"{p}: sem venda realizada.")
+    if model=="Naive":
+        if own.empty:raise ValueError(f"{p}: Naive exige vendas conhecidas.")
+        return np.repeat(float(own.iloc[-1]),len(months))
     if model=="Oficial":
         pv=blocks[sheet]["PV"]
         v=c+1
@@ -147,7 +152,7 @@ def forecast(p,months,c,blocks,model=None):
     level=np.mean(levels)
     return np.array([10**(level+(indexes[(m-start).n] if 0<=(m-start).n<3 else 0)) for m in months])
 
-def history_errors(p,c,blocks):
+def history_errors(p,c,blocks,model=None):
     """Backtest mensal h=1..3 somente com alvos realizados e origens passadas.
     Sacola de arranque (origens com 3 a 5 meses conhecidos), como no piloto."""
     pv=blocks[SHEETS[p]]["PV"]
@@ -159,7 +164,7 @@ def history_errors(p,c,blocks):
         origin=start+n-1
         if origin>=c:continue
         months=[origin+h for h in (1,2,3)]
-        try:fc=forecast(p,months,origin,blocks)
+        try:fc=forecast(p,months,origin,blocks,model=model)
         except (ValueError,KeyError):continue
         for m,f in zip(months,fc):
             if m in last.index and np.isfinite(f):
@@ -198,7 +203,7 @@ def balance(e0,plan,dm):
         stock[:,j]=e
     return stock,lost,coverage(stock,dm)
 
-def simulate(p,c,blocks,base,method="Normal (0, s)",persistent=False):
+def simulate(p,c,blocks,base,method="Normal (0, s)",persistent=False,operational_model=None):
     sheet=SHEETS[p]
     b=blocks[sheet]
     review=c+1
@@ -210,9 +215,9 @@ def simulate(p,c,blocks,base,method="Normal (0, s)",persistent=False):
     if not months:raise ValueError("Não existem meses futuros nesta revisão.")
     production=np.array([float(b["PROD"].loc[review,m]) for m in months])
     e0=float(b["EST"].loc[review,c])
-    center=forecast(p,months,c,blocks)
+    center=forecast(p,months,c,blocks,model=operational_model)
     if not np.isfinite(center).all():raise ValueError("Faltam previsões centrais na revisão.")
-    errors,num=history_errors(p,c,blocks)
+    errors,num=history_errors(p,c,blocks,model=operational_model)
     if num<2:raise ValueError(f"Apenas {num} erros de arranque conhecidos. Simulação indisponível (mínimo 2).")
     sd=float(np.std(errors,ddof=1))
     rng=np.random.default_rng(SEED+int(p[1:])*1000+c.ordinal)
@@ -240,13 +245,13 @@ def fmt(n):return f"{n:,.0f}".replace(",",".")
 # A interface é separada dos cálculos: dados -> previsão -> cenários -> riscos -> ação.
 st.title("SMART LAUNCH")
 st.caption("L'Oréal | Inteligência de abastecimento para novos lançamentos")
-st.caption("Versão 2026.11.09-r5 · Leitura sem cache · Painel operacional (4 áreas)")
+st.caption("Versão 2026.11.11 · Modelos reavaliados mensalmente · Dados só na sessão")
 
 with st.sidebar:
     st.markdown("### Smart Launch")
     st.caption("Um fechamento por vez. Sem usar informação futura.")
     st.divider()
-    st.caption("**Metodologia fixa**")
+    st.caption("**Modelos inicialmente aprovados**")
     st.write("P1 · MEA-P")
     st.write("P2 · MEA (provisório)")
     st.write("P3 · Oficial")
@@ -255,8 +260,8 @@ with st.sidebar:
     st.caption("Dados empresariais: evite hospedagem pública sem controle de acesso.")
 
 # Iniciar na visão geral, mas oferecer a atualização em uma área dedicada.
-tab_overview, tab_decisions, tab_data, tab_method = st.tabs(
-    ["📊 Visão geral", "🎛️ Simulador de decisões", "📥 Atualização de dados", "📚 Metodologia e histórico"]
+tab_overview, tab_models, tab_decisions, tab_data, tab_method = st.tabs(
+    ["📊 Visão geral", "📈 Modelos", "🎛️ Decisões", "📥 Atualização mensal", "📚 Metodologia e histórico"]
 )
 file = st.session_state.get("triangulo_file_bytes")
 file_label = st.session_state.get("triangulo_file_name","")
@@ -279,6 +284,9 @@ with tab_data:
 with tab_overview:
     if file is None:
         st.info("Para começar: abra **📥 Atualização de dados**, carregue o triângulo e selecione um fechamento.")
+with tab_models:
+    if file is None:
+        st.info("Carregue a planilha para reavaliar os modelos no fechamento selecionado.")
 with tab_decisions:
     if file is None:
         st.info("Primeiro, carregue o triângulo na aba **Atualização de dados**.")
@@ -287,7 +295,7 @@ with tab_method:
     st.markdown("""
     **Fluxo:** validar dados → prever demanda → simular 1.000 cenários → calcular estoque/cobertura → detectar alertas → testar ações.
 
-    - **Modelo fixo por produto:** P1 = MEA-P; P2 = MEA (provisório); P3 = Oficial. O painel não escolhe um modelo vencedor a cada mês.
+    - **Reavaliação mensal:** comparar MEA-P, MEA, Oficial e Naive em pares comuns origem/alvo (h1–h3). O ranking complementar deve ser homologado com o protocolo e a lista definitiva do notebook antes do uso empresarial. A troca operacional requer aprovação explícita.
     - **Incerteza padrão:** erro aditivo Normal(0, desvio-padrão amostral dos erros do arranque); demanda limitada a zero.
     - **Estoque:** \`max(0, estoque anterior + produção − demanda)\`. A venda que não couber no estoque é perdida.
     - **Cobertura:** forward cover, consumindo a demanda dos próximos meses; após a última projeção, repete-se o último mês.
@@ -351,6 +359,7 @@ with tab_data:
     d2.metric("Fechamento",label(c))
     d3.metric("Revisão utilizada",label(review))
     st.caption("A revisão selecionada deve ter realizado conhecido até o mês anterior. Nenhum arquivo foi enviado ao repositório.")
+    st.info("Histórico de uploads e aprovações é mantido somente nesta sessão. Reabra o Excel histórico para reprocessar outra competência; persistência segura depende de infraestrutura privada.")
     with st.expander("Histórico de vendas conhecido neste fechamento"):
         st.dataframe(pd.DataFrame({"Mês":[label(m) for m in known(data["PV"],c).index],
                                    "Vendido":known(data["PV"],c).to_numpy()}),hide_index=True,use_container_width=True)
@@ -365,9 +374,50 @@ with tab_method:
     sim_method=st.selectbox("Distribuição dos erros",["Normal (0, s)","Bootstrap centralizado"],key="sim_method")
     sim_persistent=st.checkbox("Mesmo erro persistente entre meses",value=False,key="sim_persistent")
 
+# A comparação usa apenas alvos realizados até o fechamento selecionado.
+detail,ranking,winner=evaluate_models(p,c,blocks,forecast,known)
+key="operational_"+p
+if key not in st.session_state:
+    st.session_state[key]=MODEL[p]
+operational=st.session_state[key]
+with tab_models:
+    st.subheader("Modelos · comparação mensal")
+    st.caption(f"Produto {p} · fechamento {label(c)} · todos os candidatos nos mesmos pares origem/alvo e horizontes h1–h3.")
+    a,b,d=st.columns(3)
+    a.metric("Modelo operacional",operational)
+    b.metric("Melhor no teste mensal",winner or "Não elegível")
+    d.metric("Modelos comparados",len(ranking))
+    if ranking.empty:
+        st.warning("Sem previsões históricas comparáveis; mantenha o modelo operacional.")
+    else:
+        st.dataframe(ranking,hide_index=True,use_container_width=True)
+        st.caption("Elegibilidade mínima operacional desta versão: ≥3 previsões em ≥2 origens; critério complementar ainda não homologado com o notebook final. MEA-P/MEA/Oficial/Naive são um subconjunto dos modelos do TCC.")
+        if not detail.empty:
+            plot=go.Figure()
+            for name,group in detail.groupby("Modelo"):
+                g=group.groupby("Origem",as_index=False)["APE"].mean()
+                plot.add_trace(go.Scatter(x=g["Origem"],y=g["APE"],mode="lines+markers",name=name))
+            plot.update_layout(height=300,yaxis_title="MAPE por origem (%)",margin=dict(l=10,r=10,t=12,b=10))
+            st.plotly_chart(plot,use_container_width=True)
+    if winner and winner!=operational:
+        st.warning(f"Novo vencedor experimental: {winner}. O modelo operacional continua {operational} até sua aprovação.")
+        if st.button(f"Aprovar {winner} para {p}",key="approve_model_"+p):
+            st.session_state[key]=winner
+            st.session_state.setdefault("model_approvals",[]).append({"Produto":p,"Fechamento":label(c),"Anterior":operational,"Aprovado":winner})
+            st.rerun()
+    if operational!=MODEL[p] and st.button("Restaurar modelo inicial do TCC",key="restore_"+p):
+        st.session_state[key]=MODEL[p]
+        st.rerun()
+    st.info("Aprovação nesta versão vale apenas durante a sessão atual. Para uso corporativo, implementar autenticação, permissões e histórico durável.")
+with tab_method:
+    st.markdown("#### Histórico de aprovações nesta sessão")
+    approvals=st.session_state.get("model_approvals",[])
+    if approvals:st.dataframe(pd.DataFrame(approvals),hide_index=True,use_container_width=True)
+    else:st.caption("Nenhuma mudança aprovada nesta sessão.")
+
 # Recalcular cenários no fechamento: toda ação compara a mesma sacola de 1.000 trajetórias.
 try:
-    result=simulate(p,c,blocks,base,sim_method,sim_persistent)
+    result=simulate(p,c,blocks,base,sim_method,sim_persistent,operational_model=operational)
     issue=None
 except Exception as exc:
     result=None
@@ -378,7 +428,7 @@ if result is None:
         st.warning(f"Há previsão, mas a simulação não está disponível neste fechamento: {issue}")
         try:
             future=[m for m in sorted(data["PV"].columns) if m>c]
-            estimates=forecast(p,future,c,blocks)
+            estimates=forecast(p,future,c,blocks,model=operational)
             st.dataframe(pd.DataFrame({"Mês":[label(m) for m in future],
                                        "Previsão (un.)":np.round(estimates)}),
                          hide_index=True,use_container_width=True)
@@ -420,7 +470,7 @@ risk_months=monthly[(monthly["Janela crítica"]=="Sim") & ((monthly["Excesso (%)
 with tab_overview:
     st.markdown("#### 2–4 · Previsão, risco e prioridades")
     m1,m2,m3,m4=st.columns(4)
-    m1.metric("Modelo de previsão",MODEL[p])
+    m1.metric("Modelo de previsão",operational)
     m2.metric("Estoque inicial",fmt(res["e0"])+" un.")
     m3.metric("Meses com gatilho",len(risk_months))
     m4.metric("Erros conhecidos",len(res["errors"]))
@@ -436,9 +486,9 @@ with tab_overview:
     figure=go.Figure()
     figure.add_trace(go.Scatter(x=labs,y=demand[2],mode="lines",line=dict(width=0),hoverinfo="skip",showlegend=False))
     figure.add_trace(go.Scatter(x=labs,y=demand[0],mode="lines",line=dict(width=0),fill="tonexty",fillcolor="rgba(239,157,75,0.18)",name="Faixa P2,5–P97,5"))
-    figure.add_trace(go.Scatter(x=labs,y=res["center"],mode="lines+markers",name=f"Previsão {MODEL[p]}",line=dict(color="#f2aa58",width=3)))
+    figure.add_trace(go.Scatter(x=labs,y=res["center"],mode="lines+markers",name=f"Previsão {operational}",line=dict(color="#f2aa58",width=3)))
     figure.add_trace(go.Scatter(x=labs,y=demand[1],mode="lines",name="P50 cenários",line=dict(color="#d0d0d0",dash="dot")))
-    figure.update_layout(template="plotly_dark",height=320,margin=dict(l=12,r=12,b=20,t=15),paper_bgcolor="#131313",plot_bgcolor="#131313")
+    figure.update_layout(template="plotly_white",height=320,margin=dict(l=12,r=12,b=20,t=15))
     st.plotly_chart(figure,use_container_width=True)
     st.markdown("#### Riscos e encaminhamento por mês")
     display_cols=["Mês","Demanda prevista","Estoque P50","Cobertura P50 (dias)","Excesso (%)","Ruptura (%)","Janela crítica","Encaminhamento"]

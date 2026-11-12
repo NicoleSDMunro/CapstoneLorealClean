@@ -12,6 +12,8 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
-      - run: python -m py_compile app.py smartlaunch_app.py
-      - run: python tests/test_smoke.py
-      - run: python tests/test_ui.py
+      - run: python -m py_compile app.py smartlaunch_app.py smartlaunch_core.py smartlaunch_ui.py smartlaunch_monthly.py
+      - run: PYTHONPATH=. python tests/test_alert_rules.py
+      - run: PYTHONPATH=. python tests/test_monthly.py
+      - run: PYTHONPATH=. python tests/test_smoke.py
+      - run: PYTHONPATH=. python tests/test_ui.py

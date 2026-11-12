@@ -7,7 +7,7 @@ import pandas as pd
 import openpyxl
 from openpyxl import Workbook
 
-src=Path("smartlaunch_app.py").read_text()
+src=Path("smartlaunch_core.py").read_text()
 tree=ast.parse(src)
 # Carrega somente funções e constantes (não inicia a interface Streamlit).
 keep=[]
