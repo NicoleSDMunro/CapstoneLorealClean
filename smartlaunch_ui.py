@@ -340,7 +340,7 @@ if page == "Visão geral":
                     active_deadlines=[lot["prazo"] for lot in eligible_lots(res,close)
                                       if lot["alterável"] and lot["mês"]<=row["Período"]]
                     if active_deadlines:
-                        st.caption("Último prazo disponível para análise: "+label(min(active_deadlines))+
+                        st.caption("Próximo prazo de decisão: "+label(min(active_deadlines))+
                                    " (mês teórico; confirmar com fornecedor).")
                     else:
                         st.caption("Prazo de intervenção no fornecedor: indisponível para este risco.")
