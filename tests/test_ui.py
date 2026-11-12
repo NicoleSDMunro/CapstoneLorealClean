@@ -12,8 +12,7 @@ at.session_state["triangulo_file_name"]="triangulo_sintetico.xlsx"
 at.run()
 assert not at.exception, [str(e) for e in at.exception]
 assert any("Central de Alertas" in str(t.value) for t in at.title)
-at.session_state["nav_page"]="Riscos de estoque"
-at.run()
+at.radio[0].set_value("Riscos de estoque").run()
 assert not at.exception, [str(e) for e in at.exception]
 assert any("Riscos de estoque" in str(t.value) for t in at.title)
 print("UI PASS: navegação, leitura sintética e análise de riscos")
