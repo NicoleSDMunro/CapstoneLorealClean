@@ -1,3 +1,37 @@
+# Smart Launch — Central de Alertas (interface clara, novembro/2026)
+
+**Execute:** `streamlit run app.py`. A interface atual usa **seis áreas** em menu lateral e só apresenta valores calculados a partir do Triângulo carregado. O app original de quatro/cinco abas foi preservado em `smartlaunch_app.py`, enquanto o motor compartilhado foi extraído para `smartlaunch_core.py`.
+
+## O que mudou nesta versão
+
+1. **Central de Alertas:** indicadores reais dos três produtos, cards sincronizados com os gráficos, classificação de risco e ação, linha do tempo E/R/P restrita à janela crítica.
+2. **Atualização mensal:** upload do Excel, auditoria dos blocos, fechamento/revisão comum aos produtos, diagnóstico de falhas e nenhuma simulação inventada quando a amostra é insuficiente.
+3. **Previsão e modelos:** ranking experimental de quatro métodos (MEA-P, MEA, Oficial, Naive), seleção e modelo operacional separados, aprovação explícita da troca.
+4. **Riscos de estoque:** gráficos de excesso e ruptura com linha de 2,5%, tabela por mês e evolução retrospectiva do risco para um mesmo mês-alvo quando há fechamentos avaliáveis.
+5. **Simulador de decisões:** destaque para prazo teórico do lote; cortes/adiamentos/antecipações só aparecem quando o lote está dentro do prazo. Com prazo vencido, a tela orienta encaminhamento comercial ou monitoramento, sem oferecer redução como ação executável.
+6. **Histórico e metodologia:** parâmetros de sensibilidade, registro temporário de aprovações e exportação de riscos CSV.
+
+## Atenção antes de usar com a L'Oréal
+
+- **Não é homologado para produção:** reproduzir previsões, cenários, coberturas e gatilhos contra o notebook final e o Excel de resultados é obrigatório.
+- **Ranking reduzido e provisório:** os quatro candidatos e a elegibilidade simplificada não equivalem aos 49 modelos testados no TCC.
+- **Sem persistência corporativa:** uploads e decisões duram somente a sessão Streamlit; sem controle de acesso, histórico entre sessões ou notificações externas.
+- **Repositório público:** **não inserir planilhas reais no GitHub**. Qualquer implantação com dados reais exige um ambiente protegido autorizado. O processamento ocorre no servidor da aplicação.
+- Os prazos calculados são teóricos (lead time), não garantia de viabilidade contratual.
+
+## Testes
+
+```bash
+pip install -r requirements.txt
+python -m py_compile app.py smartlaunch_core.py smartlaunch_ui.py smartlaunch_monthly.py
+python tests/test_alert_rules.py
+python tests/test_monthly.py
+python tests/test_smoke.py
+python tests/test_ui.py
+```
+
+---
+
 # Smart Launch — Painel mensal de apoio à decisão (implementação incremental)
 
 ## O que está implementado nesta branch
