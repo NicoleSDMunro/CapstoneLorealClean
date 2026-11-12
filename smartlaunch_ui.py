@@ -337,6 +337,13 @@ if page == "Visão geral":
                                 '</span><span class="pill pill-muted">Ação: '+html.escape(act)+'</span>',
                                 unsafe_allow_html=True)
                     st.caption(description)
+                    active_deadlines=[lot["prazo"] for lot in eligible_lots(res,close)
+                                      if lot["alterável"] and lot["mês"]<=row["Período"]]
+                    if active_deadlines:
+                        st.caption("Último prazo disponível para análise: "+label(min(active_deadlines))+
+                                   " (mês teórico; confirmar com fornecedor).")
+                    else:
+                        st.caption("Prazo de intervenção no fornecedor: indisponível para este risco.")
                 else:
                     st.markdown('<span class="pill pill-green">Sem gatilho no período</span>',unsafe_allow_html=True)
                     st.caption("O acompanhamento continua mensalmente.")
