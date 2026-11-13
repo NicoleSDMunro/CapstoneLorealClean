@@ -1,3 +1,28 @@
+# Impacto Operacional — 2026-11-13
+
+**Nova página** no menu lateral, acessível também pelo simulador. Processa exclusivamente o arquivo Triângulo carregado pelo usuário, sem planilhas empresariais no GitHub.
+
+**Indicadores disponíveis:**
+- **Estoque excedente esperado no mês-alvo (unidades):** por cenário, estoque final no mês-alvo menos a soma das demandas simuladas dos **seis meses seguintes**, truncado em zero. A média dos 1.000 cenários é o excesso projetado. Não se somam excessos entre meses, pois isso contaria o mesmo estoque repetidas vezes.
+- **Excesso potencialmente evitado:** diferença entre o plano inalterado e o plano alternativo para o **mesmo mês-alvo** e a **mesma demanda**. Pode ser negativa (agravamento).
+- **Vendas perdidas adicionais:** diferença entre perdas simuladas totais na **janela crítica** dos planos (unidades, não eventos). Nunca incluir meses fora da janela na taxa de atendimento.
+- **Fill rate projetado:** 1 − (soma das vendas perdidas / soma da demanda simulada), ambos sobre os mesmos meses da janela crítica.
+- **Fronteira física estoque-serviço:** gráfico das alternativas de corte/aumento de um lote, em unidades esperadas de excesso vs. vendas perdidas. Identifica alternativas não dominadas; **não** é fronteira de custo em R$ sem custos fornecidos.
+- **Prazo do fornecedor:** exibe apenas lotes positivos com prazo futuro pelo lead time arredondado. Ajustes não são executados; contratos, lote mínimo e capacidade continuam por confirmar.
+- **Planejamento Oficial:** diferença histórica de MAPE entre previsão operacional e Oficial, em **pares iguais de origem/alvo** (apenas quatro modelos no backtest preliminar). Não confundir com política de compra/produção comprovadamente utilizada na empresa.
+- **Antecedência operacional histórica:** percentual de **primeiros alertas reconstruídos** (produto × mês-alvo × tipo), nos quais havia lote ajustável pelo lead time. Não é taxa de decisões executadas ou benefício realizado.
+
+**Limitação importante:** ao estimar seis meses de consumo após o mês-alvo, o motor extrapola o último mês simulado se o horizonte terminar antes. A interface comunica quantos meses tiveram extrapolação. A meta exploratória de fill rate é ajustável pelo usuário; não é padrão de serviço aprovado pela L'Oréal e não determina ação automática. A simulação depende da incerteza estimada com poucos erros históricos, e precisa ser homologada.
+
+**Referência operacional:** o cenário "Manter plano" é o plano de produção carregado **sem alteração**, não é uma comprovação de que essa seja a política ótima nem o comportamento oficial da empresa. O ganho de unidade é potencial/simulado, não redução observada de estoque ou custo real.
+
+\`\`\`bash
+PYTHONPATH=. python tests/test_impact.py
+PYTHONPATH=. python tests/test_ui.py
+\`\`\`
+
+---
+
 ## Cards de decisão — atualização de UX (2026-11-13)
 
 A **Visão geral** agora organiza cada produto com três blocos:
