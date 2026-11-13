@@ -15,4 +15,7 @@ assert any("Central de Alertas" in str(t.value) for t in at.title)
 at.radio[0].set_value("Riscos de estoque").run()
 assert not at.exception, [str(e) for e in at.exception]
 assert any("Riscos de estoque" in str(t.value) for t in at.title)
-print("UI PASS: navegação, leitura sintética e análise de riscos")
+at.radio[0].set_value("Impacto operacional").run()
+assert not at.exception, [str(e) for e in at.exception]
+assert any("Impacto operacional" in str(t.value) for t in at.title)
+print("UI PASS: navegação, riscos e métricas de impacto")
