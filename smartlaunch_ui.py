@@ -13,6 +13,10 @@ from smartlaunch_core import (
     simulate, impacts, fmt,
 )
 from smartlaunch_monthly import evaluate_models
+from smartlaunch_validation import (
+    reconstruct_history, first_alerts, latest_verifiable_close,
+    available_origin_reviews, EVENT_YES, EVENT_NO,
+)
 
 st.set_page_config(page_title="Smart Launch | Central de Alertas", page_icon="📦", layout="wide")
 st.markdown("""
@@ -50,7 +54,8 @@ div[data-testid="stAlert"] {border-radius:12px;}
 
 NAV = [
     "Visão geral", "Atualização mensal", "Previsão e modelos",
-    "Riscos de estoque", "Simulador de decisões", "Histórico e metodologia",
+    "Riscos de estoque", "Simulador de decisões",
+    "Validação histórica dos alertas", "Histórico e metodologia",
 ]
 DEFAULT_METHOD = "Normal (0, s)"
 LIMIT_ALERT = 0.025
@@ -640,6 +645,178 @@ elif page == "Simulador de decisões":
             st.warning("Cenário matemático, não autorização de alteração. Confirme contratos, capacidade, insumos e lotes mínimos antes de agir.")
         else:
             st.warning("Esta ação não cabe no horizonte de planejamento disponível.")
+
+elif page == "Validação histórica dos alertas":
+    st.title("Validação histórica dos alertas")
+    st.write("O que o Smart Launch previa em cada fechamento, o que foi registrado posteriormente e se o fornecedor ainda poderia receber uma alteração.")
+    st.info(
+        "Esta é uma **reconstrução retrospectiva** com as revisões do Triângulo, "
+        "não uma auditoria de alertas efetivamente salvos no passado. "
+        "A aplicação ainda não guarda as previsões emitidas e os modelos aprovados em cada fechamento."
+    )
+    st.caption(
+        "A previsão e as probabilidades são recalculadas usando somente a revisão da origem. "
+        "Os realizados futuros entram apenas na verificação, nunca na previsão original."
+    )
+    v1,v2,v3=st.columns([1,1,1])
+    with v1:
+        product=st.selectbox("Produto",list(MODEL),index=list(MODEL).index(chosen),key="validation_product")
+    last_close=latest_verifiable_close(blocks,product)
+    selectable=[rev-1 for rev in available_origin_reviews(blocks,product,last_close)] if last_close is not None else []
+    if not selectable:
+        st.warning("Não existem revisões históricas suficientes para avaliar este produto.")
+        st.stop()
+    with v2:
+        verification_close=st.selectbox(
+            "Verificar com dados até",selectable,index=len(selectable)-1,
+            format_func=label,key="validation_asof"
+        )
+    with v3:
+        max_origins=st.selectbox(
+            "Fechamentos reconstruídos",[4,8,12,24],index=1,key="validation_origins"
+        )
+    horizon=st.select_slider("Horizonte máximo por previsão (meses)",[3,6,9,12],value=9,
+                            key="validation_horizon")
+    initial_model=MODEL[product]
+    chosen_operational=st.session_state["operational_"+product]
+    model_choices=[initial_model]
+    if chosen_operational!=initial_model:
+        model_choices.append(chosen_operational)
+    model=st.selectbox("Modelo para reconstruir as previsões",model_choices,
+                       key="validation_model")
+    st.caption(
+        "Modelo congelado para fins de comparação. Caso a seleção do modelo tenha mudado "
+        "ao longo dos meses, este histórico não recupera automaticamente a escolha feita à época."
+    )
+    with st.spinner("Reconstituindo fechamentos históricos sem usar dados futuros na previsão..."):
+        projections, alerts, gaps=reconstruct_history(
+            product, verification_close, blocks, base, model=model,
+            max_origins=max_origins, max_horizon=horizon,
+            method=DEFAULT_METHOD, persistent=False
+        )
+    earliest=first_alerts(alerts)
+    verified=(
+        earliest[earliest["Status observado"].isin([EVENT_YES, EVENT_NO])]
+        if not earliest.empty else earliest
+    )
+    confirmed=(verified["Status observado"]==EVENT_YES).sum() if not verified.empty else 0
+    false_alarms=(verified["Status observado"]==EVENT_NO).sum() if not verified.empty else 0
+    timely=int(earliest["Emitido em tempo pelo LT"].sum()) if not earliest.empty else 0
+    metrics=st.columns(4)
+    metrics[0].metric("Primeiros alertas",len(earliest))
+    metrics[1].metric("Excessos verificáveis",int(confirmed) if len(verified) else "—")
+    metrics[2].metric("Alertas de excesso não confirmados",int(false_alarms) if len(verified) else "—")
+    metrics[3].metric("Alertas com prazo teórico aberto",timely if not earliest.empty else "—")
+    st.caption(
+        "Os resultados contam **meses-alvo × tipo de risco distintos**, usando a primeira emissão "
+        "para evitar contabilizar o mesmo problema repetido em revisões sobrepostas. "
+        "Status de excesso só é verificável se o estoque estiver registrado e a demanda futura "
+        "realizada permitir decidir o limite de 180 dias. Prazo aberto pelo LT não confirma "
+        "possibilidade contratual de alteração."
+    )
+    st.subheader("Primeiro alerta por mês-alvo")
+    if earliest.empty:
+        st.warning(
+            "Nenhum alerta probabilístico pôde ser reconstruído nas revisões selecionadas. "
+            "Isso não significa ausência de excesso ou ruptura."
+        )
+    else:
+        status_cols=[
+            "Fechamento","Mês-alvo","Tipo de alerta","Probabilidade do alerta (%)",
+            "Previsão no fechamento (un.)","Venda realizada (un.)",
+            "Estoque na revisão posterior (un.)","Cobertura com realizados",
+            "Status observado","Antecedência (meses)",
+            "Próximo prazo","Status de oportunidade"
+        ]
+        st.dataframe(earliest[status_cols],hide_index=True,use_container_width=True)
+        st.caption(
+            "A classificação de ruptura permanece não verificável enquanto não houver "
+            "dados de vendas perdidas efetivamente realizadas. Estoque zerado, isoladamente, "
+            "não prova demanda não atendida."
+        )
+    st.subheader("Previsão original reconstruída × realizado")
+    if projections.empty:
+        st.warning("Não existem previsões históricas reconstruíveis com os critérios atuais.")
+    else:
+        st.caption(
+            "O erro percentual só é calculado quando existe venda realizada positiva. "
+            "O estoque é o valor da coluna do mês-alvo na revisão seguinte (m+1), "
+            "não o estoque projetado na data do alerta."
+        )
+        shown=[
+            "Fechamento","Mês-alvo","Horizonte","Modelo reconstruído",
+            "Previsão no fechamento (un.)","Venda realizada (un.)",
+            "Erro absoluto (un.)","Erro percentual (%)",
+            "Estoque na revisão posterior (un.)",
+            "Cobertura com realizados","Verificação de excesso",
+            "Prob. excesso (%)","Prob. ruptura (%)"
+        ]
+        st.dataframe(projections[shown].sort_values(["Fechamento","Horizonte"]),
+                     hide_index=True,use_container_width=True)
+        s1,s2=st.columns(2)
+        with s1:
+            if not alerts.empty:
+                target_options=sorted(set(alerts["_alvo"]))
+            else:
+                target_options=sorted(set(projections["_alvo"]))
+            selected_target=st.selectbox("Acompanhar um mês-alvo",target_options,format_func=label)
+        with s2:
+            chart_type=st.selectbox("Tipo de probabilidade",["Excesso","Ruptura"])
+        chart_source=projections[projections["_alvo"]==selected_target].sort_values("_origem")
+        risk_col="Prob. excesso (%)" if chart_type=="Excesso" else "Prob. ruptura (%)"
+        chart_source=chart_source.dropna(subset=[risk_col])
+        if not chart_source.empty:
+            fchart=go.Figure()
+            fchart.add_trace(go.Scatter(
+                x=chart_source["Fechamento"],y=chart_source[risk_col],
+                name=chart_type,mode="lines+markers",
+                line=dict(color="#b42318" if chart_type=="Excesso" else "#d69b14",width=3)
+            ))
+            fchart.add_hline(y=2.5,line_dash="dash",line_color="#595959",
+                             annotation_text="Gatilho 2,5%",annotation_position="top left")
+            fchart.update_layout(template="plotly_white",height=295,
+                                 yaxis_title="Probabilidade (%)",
+                                 xaxis_title="Fechamento da previsão",
+                                 margin=dict(l=20,r=15,t=24,b=15),showlegend=False)
+            st.plotly_chart(fchart,use_container_width=True)
+        else:
+            st.info("Este mês-alvo ainda não tem probabilidades históricas válidas.")
+    if not alerts.empty:
+        with st.expander("Todas as emissões históricas, inclusive alertas repetidos"):
+            detail_cols=[
+                "Fechamento","Mês-alvo","Tipo de alerta",
+                "Probabilidade do alerta (%)","Status observado",
+                "Status de oportunidade","Antecedência (meses)"
+            ]
+            st.dataframe(alerts[detail_cols],hide_index=True,use_container_width=True)
+    if not gaps.empty:
+        with st.expander("Fechamentos sem previsão ou sem simulação completa"):
+            st.dataframe(gaps,hide_index=True,use_container_width=True)
+    st.subheader("Exportar validação")
+    left,right=st.columns(2)
+    if not projections.empty:
+        csv_projection=projections.drop(columns=["_origem","_alvo"]).to_csv(
+            index=False
+        ).encode("utf-8-sig")
+        left.download_button(
+            "Baixar previsões × realizados (CSV)",csv_projection,
+            file_name="validacao_previsoes_"+product+".csv",mime="text/csv"
+        )
+    if not earliest.empty:
+        csv_alerts=earliest.drop(columns=["_origem","_alvo"]).to_csv(
+            index=False
+        ).encode("utf-8-sig")
+        right.download_button(
+            "Baixar primeiros alertas (CSV)",csv_alerts,
+            file_name="validacao_alertas_"+product+".csv",mime="text/csv"
+        )
+    st.warning(
+        "Validação exploratória. As probabilidades foram geradas com poucos erros históricos "
+        "e não têm calibração comprovada. Sem seis meses futuros realizados (ou esgotamento "
+        "observado antes disso), não é correto declarar excesso confirmado ou descartado. "
+        "O estoque apresentado é um registro de revisão posterior cujo significado "
+        "operacional deve ser confirmado com a L'Oréal."
+    )
 
 elif page == "Histórico e metodologia":
     st.title("Histórico e metodologia")
