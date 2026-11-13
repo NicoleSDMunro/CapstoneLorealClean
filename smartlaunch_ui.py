@@ -91,6 +91,39 @@ def explain_empty():
         pass
 
 
+def preview_forecast(product, close, blocks, operational_model):
+    """Previsão pontual histórica sem estimar probabilidades quando faltam resíduos."""
+    data = blocks[SHEETS[product]]
+    revision = close + 1
+    if revision not in data["PV"].index:
+        return None, "Revisão " + label(revision) + " não encontrada para PV."
+    months = [m for m in sorted(data["PV"].columns)
+              if m > close and m in data["PROD"].columns]
+    if not months:
+        return None, "Não existem meses futuros nas colunas do Triângulo."
+    try:
+        values = forecast(product, months, close, blocks, model=operational_model)
+        if len(values) != len(months) or not np.isfinite(values).all():
+            return None, "A previsão central contém valores ausentes."
+        return pd.DataFrame({"Mês": [label(m) for m in months],
+                             "Previsão central (un.)": np.round(values).astype(int)}), None
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        return None, str(exc)
+
+
+def show_available_forecast(product, close, blocks):
+    frame, issue = preview_forecast(product, close, blocks,
+                                    st.session_state["operational_" + product])
+    if frame is None:
+        st.caption("Previsão central indisponível para " + product + ": " + issue)
+    else:
+        st.caption("Previsão pontual do modelo " +
+                   st.session_state["operational_" + product] +
+                   ". Não implica probabilidade de excesso ou ruptura.")
+        st.dataframe(frame, hide_index=True, use_container_width=True)
+    return frame is not None
+
+
 def rows_from_sim(res):
     ex = (res["cov"] >= LIM).mean(axis=0)
     ru = (res["lost"] > 0).mean(axis=0)
@@ -292,9 +325,20 @@ file_name = st.session_state.get("triangulo_file_name","Triângulo carregado na 
 st.caption("Fechamento: " + label(close) + "   ·   Revisão: " + label(review) +
            "   ·   " + status + "   ·   Arquivo: " + file_name)
 if ready_count < len(MODEL):
-    st.warning("Probabilidades indisponíveis para " +
+    st.warning("Probabilidades não calculadas para " +
                ", ".join(p for p in MODEL if results[p] is None) +
-               ". Esses produtos não serão classificados como sem risco.")
+               ". Sem simulação válida NÃO significa risco zero.")
+    with st.expander("Entender por que a simulação está indisponível"):
+        st.caption("O Smart Launch usa a venda do mês m na revisão m+1. "
+                   "Se o último registro é mar/26, a última venda confirmada pelo "
+                   "método pode ser fev/26. Para avaliar o fechamento de mar/26, "
+                   "é necessária a revisão abr/26.")
+        for product in MODEL:
+            if results[product] is None:
+                st.write("**" + product + ":** " + errors.get(product, "Sem dados suficientes"))
+        st.caption("Mesmo com uma previsão central disponível, a simulação "
+                   "precisa de pelo menos dois erros históricos elegíveis do arranque. "
+                   "Não preenchemos probabilidades com valores fictícios.")
 
 if page == "Visão geral":
     st.title("Central de Alertas")
@@ -321,8 +365,16 @@ if page == "Visão geral":
     mc=st.columns(5)
     for col,title,value in zip(mc,
         ["Produtos monitorados","Risco de excesso","Risco de ruptura","Lotes com prazo aberto","Sem simulação válida"],
-        [len(MODEL),counts["ex"],counts["ru"],counts["open"],len(MODEL)-ready_count]):
+        [len(MODEL),
+         f'{counts["ex"]}/{ready_count}' if ready_count else "—",
+         f'{counts["ru"]}/{ready_count}' if ready_count else "—",
+         counts["open"] if ready_count else "—",
+         len(MODEL)-ready_count]):
         col.metric(title,value)
+    if ready_count<len(MODEL):
+        st.caption("Excesso e ruptura: ocorrências apenas entre os produtos com "
+                   "simulação válida (numerador / avaliados). O traço indica "
+                   "não calculado, não ausência de risco.")
     st.subheader("Prioridades do fechamento")
     for _,_,product,typ,prob,row,act,description in sorted(priorities):
         res=results[product]
@@ -361,7 +413,11 @@ if page == "Visão geral":
     missing=[p for p in MODEL if results[p] is None]
     if missing:
         st.info("Sem avaliação probabilística: " + ", ".join(missing) +
-                ". Confira o diagnóstico na seção Atualização mensal.")
+                ". Previsões centrais eventualmente disponíveis aparecem abaixo.")
+        st.subheader("Previsões disponíveis sem simulação de risco")
+        for product in missing:
+            with st.expander("Produto " + product + " — " + errors.get(product, "Sem simulação")):
+                show_available_forecast(product, close, blocks)
     st.subheader("Linha do tempo dos alertas")
     st.caption("E = excesso · R = ruptura · P = prazo ainda aberto de lote. São exibidos apenas alertas dentro da janela crítica.")
     with st.container(border=True):
@@ -385,6 +441,10 @@ elif page == "Atualização mensal":
     c2.metric("Revisão utilizada",label(review))
     c3.metric("Produtos com simulação",f"{ready_count}/{len(MODEL)}")
     st.info("O Excel deve conter as revisões anteriores. Este protótipo não salva arquivos nem decisões de maneira permanente.")
+    st.caption("Como o Triângulo funciona: o realizado de mar/26 é recuperado "
+               "na revisão abr/26. Para simular um fechamento histórico, mantenha "
+               "todas as revisões originais e escolha a revisão correspondente "
+               "no menu lateral, sem apagar as linhas posteriores.")
     with st.expander("Vendas conhecidas por produto"):
         for product,sheet in SHEETS.items():
             observed=known(blocks[sheet]["PV"],close)
@@ -452,7 +512,11 @@ elif page == "Riscos de estoque":
     product=chosen
     res=results[product]
     if res is None:
-        st.warning("Não há simulação válida para "+product+": "+errors.get(product,"Sem informação suficiente"))
+        st.warning("Não há simulação probabilística válida para " + product + ": " +
+                   errors.get(product, "Sem informação suficiente"))
+        st.info("Uma previsão central pode existir mesmo quando o histórico de "
+                "erros ainda não permite calcular probabilidades.")
+        show_available_forecast(product, close, blocks)
         st.stop()
     frame=rows_from_sim(res)
     st.write("Produto "+product+" · modelo "+st.session_state["operational_"+product]+
