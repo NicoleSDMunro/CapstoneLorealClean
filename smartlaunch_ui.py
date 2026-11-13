@@ -88,6 +88,8 @@ def update_uploaded_file(uploaded):
         st.session_state["data_digest"] = digest
         st.session_state["uploaded_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         st.session_state.pop("selected_revision", None)
+        for key in ("validation_asof","validation_product","validation_model","validation_origins","validation_horizon"):
+            st.session_state.pop(key, None)
 
 
 def explain_empty():
@@ -751,7 +753,7 @@ elif page == "Validação histórica dos alertas":
             "Cobertura com realizados","Verificação de excesso",
             "Prob. excesso (%)","Prob. ruptura (%)"
         ]
-        st.dataframe(projections[shown].sort_values(["Fechamento","Horizonte"]),
+        st.dataframe(projections[shown],
                      hide_index=True,use_container_width=True)
         s1,s2=st.columns(2)
         with s1:
