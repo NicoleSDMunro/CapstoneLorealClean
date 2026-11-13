@@ -1,3 +1,16 @@
+## Cards de decisão — atualização de UX (2026-11-13)
+
+A **Visão geral** agora organiza cada produto com três blocos:
+- **O que está acontecendo:** tipo de risco, probabilidade máxima do mesmo tipo na janela crítica, mês do pico, primeiro mês que acionou o gatilho e cobertura mediana nesse pico. Todos saem das mesmas 1.000 trajetórias exibidas em **Riscos de estoque**.
+- **Até quando agir:** mês de prazo teórico do lote que poderia chegar até o **primeiro** mês alertado, usando o lead time em meses arredondados do Triângulo. Se não houver lote positivo alterável, a interface informa que não existe ação viável pelo critério temporal.
+- **O que pode fazer:** orientação de análise, não ordem para fornecedor. Excesso permite avaliar redução/adiamento; ruptura permite estudar reforço/antecipação apenas se houver lote relevante e em prazo. Quando não há prazo, encaminha a monitoramento, alocação ou comercial.
+
+No Triângulo atual **não há data diária contratual de alteração**; por isso os cards não mostram datas específicas no formato DD/MM/AAAA nem contagem de dias fictícia. Essa informação deve ser ligada aos sistemas e contratos da L'Oréal antes de uso operacional. O texto do ranking indica que o melhor modelo resulta de comparação **experimental de quatro candidatos**, não de seleção completa homologada.
+
+Teste: `PYTHONPATH=. python tests/test_priority_cards.py`.
+
+---
+
 ## Validação histórica dos alertas (2026-11-13)
 
 A nova seção **Validação histórica dos alertas**, acessível pelo menu lateral, reconstrói retrospectivamente o que um modelo teria previsto em cada fechamento, usando o Triângulo histórico e seus meses disponíveis. Os valores são reprocessados, e **não equivalem a alertas originalmente persistidos**: esta versão ainda não armazena o modelo aprovado por fechamento nem a previsão emitida na operação real.

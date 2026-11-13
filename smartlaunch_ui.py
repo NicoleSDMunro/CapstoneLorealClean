@@ -13,6 +13,7 @@ from smartlaunch_core import (
     simulate, impacts, fmt,
 )
 from smartlaunch_monthly import evaluate_models
+from smartlaunch_priority import card_summary
 from smartlaunch_validation import (
     reconstruct_history, first_alerts, latest_verifiable_close,
     available_origin_reviews, EVENT_YES, EVENT_NO,
@@ -49,6 +50,14 @@ div[data-testid="stAlert"] {border-radius:12px;}
 .tdot-e {background:#b42318;}
 .tdot-r {background:#e5ac38;color:#382700;}
 .tdot-p {background:#171717;}
+.decision-panel {background:#fbfbfa;border-radius:16px;padding:18px 20px;min-height:162px;}
+.decision-eyebrow {font-size:11px;letter-spacing:.09em;font-weight:750;color:#666;text-transform:uppercase;margin-bottom:8px;}
+.decision-description {font-size:14px;line-height:1.5;color:#181818;}
+.decision-number {font-size:29px;font-weight:760;line-height:1.2;color:#101010;margin:8px 0;}
+.decision-deadline {font-size:24px;font-weight:760;line-height:1.25;color:#9c6300;margin:7px 0;}
+.decision-line {font-size:13px;color:#454545;line-height:1.55;margin-top:6px;}
+.decision-action {background:#f6f6f4;border:1px solid #eeefec;border-radius:13px;padding:13px 16px;}
+.decision-footnote {color:#6c6c6c;font-size:12px;line-height:1.5;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -383,40 +392,102 @@ if page == "Visão geral":
                    "simulação válida (numerador / avaliados). O traço indica "
                    "não calculado, não ausência de risco.")
     st.subheader("Prioridades do fechamento")
-    for _,_,product,typ,prob,row,act,description in sorted(priorities):
-        res=results[product]
+    st.caption("Risco e probabilidade vêm da mesma simulação apresentada nos gráficos. "
+               "Prazos de fornecedores são calculados por competência mensal e são teóricos.")
+    summaries = []
+    for product,res in results.items():
+        if res is not None:
+            summaries.append((product, card_summary(product, res, close)))
+    summaries.sort(key=lambda x: (
+        0 if x[1]["alert"] else 1,
+        x[1].get("first_month", pd.Period("2099-01",freq="M")),
+        x[0]
+    ))
+    for product, summary in summaries:
         with st.container(border=True):
-            lead,metrics,go_button=st.columns([2.1,2.2,.8],vertical_alignment="center")
-            with lead:
+            heading, action_button = st.columns([4.3,1],vertical_alignment="center")
+            with heading:
                 st.markdown("### Produto " + product)
-                if typ:
-                    word="Excesso de estoque" if typ=="excesso" else "Ruptura"
-                    color="pill-red" if typ=="excesso" else "pill-amber"
-                    st.markdown('<span class="pill '+color+'">Risco: '+word+
-                                '</span><span class="pill pill-muted">Ação: '+html.escape(act)+'</span>',
-                                unsafe_allow_html=True)
-                    st.caption(description)
-                    active_deadlines=[lot["prazo"] for lot in eligible_lots(res,close)
-                                      if lot["alterável"] and lot["mês"]<=row["Período"]]
-                    if active_deadlines:
-                        st.caption("Próximo prazo de decisão: "+label(min(active_deadlines))+
-                                   " (mês teórico; confirmar com fornecedor).")
-                    else:
-                        st.caption("Prazo de intervenção no fornecedor: indisponível para este risco.")
+                if summary["alert"]:
+                    risk_color = "pill-red" if summary["type"]=="Excesso" else "pill-amber"
+                    urgency_color = ("pill-green" if summary["first_target_has_changeable_lot"]
+                                     else "pill-amber")
+                    st.markdown(
+                        '<span class="pill '+risk_color+'">Risco: '+summary["type"]+'</span>'
+                        '<span class="pill '+urgency_color+'">Urgência: '+
+                        html.escape(summary["urgency"])+'</span>'
+                        '<span class="pill pill-green">Ação: '+html.escape(summary["action"])+'</span>',
+                        unsafe_allow_html=True
+                    )
                 else:
-                    st.markdown('<span class="pill pill-green">Sem gatilho no período</span>',unsafe_allow_html=True)
-                    st.caption("O acompanhamento continua mensalmente.")
-            with metrics:
-                if typ:
-                    m1,m2,m3=st.columns(3)
-                    m1.metric("Probabilidade",f"{prob:.1f}%")
-                    m2.metric("Mês de risco",row["Mês"])
-                    m3.metric("Cobertura P50",f'{int(row["Cobertura P50 (dias)"])} dias')
-                st.caption("Modelo em uso: " + st.session_state["operational_"+product] +
-                           "   ·   Melhor testado: " + (rankings[product][2] or "Não elegível"))
-            with go_button:
-                st.button("Analisar produto",key="open_"+product, type="primary",
+                    st.markdown('<span class="pill pill-green">Sem alertas na janela crítica</span>',
+                                unsafe_allow_html=True)
+            with action_button:
+                st.button("Analisar produto", key="open_"+product, type="primary",
+                          use_container_width=True,
                           on_click=navigate,args=("Riscos de estoque",product))
+            if summary["alert"]:
+                risk_col, deadline_col = st.columns(2,gap="medium")
+                first_month=label(summary["first_month"])
+                peak_month=label(summary["peak_month"])
+                category=summary["type"]
+                problem = ("Existe probabilidade de estoque com cobertura acima de 180 dias."
+                           if category=="Excesso" else
+                           "Existe probabilidade de demanda não atendida por falta de estoque.")
+                risk_html=(
+                    '<div class="decision-panel">'
+                    '<div class="decision-eyebrow">O que está acontecendo</div>'
+                    '<div class="decision-description">'+problem+'</div>'
+                    '<div class="decision-number">'+f'{summary["peak_probability"]*100:.1f}%'.replace(".",",")+'</div>'
+                    '<div class="decision-line">Pico em <b>'+peak_month+'</b></div>'
+                    '<div class="decision-line">Primeiro mês em alerta: <b>'+first_month+'</b></div>'
+                    '<div class="decision-line">Cobertura mediana no pico: <b>'+
+                    f'{summary["coverage_peak_days"]:.0f} dias'+'</b></div>'
+                    '</div>'
+                )
+                deadline = (label(summary["deadline"])
+                            if summary["deadline"] is not None else "Não disponível")
+                remaining=summary.get("time_left_months")
+                remaining_text=(
+                    'Restam '+str(remaining)+' competência(s) mensais após o fechamento.'
+                    if remaining is not None else
+                    'Não há oportunidade identificada de alterar um lote a tempo.'
+                )
+                deadline_html=(
+                    '<div class="decision-panel">'
+                    '<div class="decision-eyebrow">Até quando agir</div>'
+                    '<div class="decision-description">'+html.escape(summary["deadline_label"])+'</div>'
+                    '<div class="decision-deadline">'+html.escape(deadline)+'</div>'
+                    '<div class="decision-line">'+html.escape(summary["urgency"])+'</div>'
+                    '<div class="decision-line">'+html.escape(remaining_text)+'</div>'
+                    '<div class="decision-line">Lead time usado: <b>'+
+                    str(summary["lead_time_months"])+' meses (arredondado)</b></div>'
+                    '<div class="decision-footnote">Sem data exata do fornecedor na base. '
+                    'Prazo em mês; confirmar calendário e restrições.</div>'
+                    '</div>'
+                )
+                with risk_col:
+                    st.markdown(risk_html,unsafe_allow_html=True)
+                with deadline_col:
+                    st.markdown(deadline_html,unsafe_allow_html=True)
+                st.markdown(
+                    '<div class="decision-action">'
+                    '<div class="decision-eyebrow">O que pode fazer</div>'
+                    '<div style="font-weight:720;margin-bottom:5px">'+
+                    html.escape(summary["action"])+'</div>'
+                    '<div class="decision-description">'+html.escape(summary["suggested"])+'</div>'
+                    '<div class="decision-footnote">'+html.escape(summary["qualification"])+'</div>'
+                    '</div>',unsafe_allow_html=True
+                )
+            else:
+                st.caption(summary["message"])
+            model_in_use=st.session_state["operational_"+product]
+            tested_winner=rankings[product][2] or "Não elegível"
+            st.caption(
+                "Modelo em uso: **"+model_in_use+"**  ·  "
+                "Melhor no teste reduzido (4 modelos): **"+tested_winner+"**  ·  "
+                "Reavaliado com dados do fechamento **"+label(close)+"**"
+            )
     missing=[p for p in MODEL if results[p] is None]
     if missing:
         st.info("Sem avaliação probabilística: " + ", ".join(missing) +
