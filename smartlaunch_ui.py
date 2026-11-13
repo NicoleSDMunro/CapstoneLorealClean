@@ -687,8 +687,6 @@ elif page == "Simulador de decisões":
         st.error("Não existem lotes alteráveis pelo prazo de fornecimento neste fechamento.")
         st.info("Ação junto ao fornecedor indisponível. Avaliar encaminhamento comercial ou monitoramento.")
         st.caption("Não exibimos cortes de lote como executáveis após o vencimento do prazo.")
-    st.button("Comparar impacto em unidades e fill rate",key="impact_from_sim",
-              on_click=navigate,args=("Impacto operacional",product))
     else:
         st.success(str(len(open_lots))+" lote(s) ainda dentro do prazo teórico. A possibilidade contratual depende da L'Oréal.")
         names={lot["índice"]: label(lot["mês"])+" · "+fmt(lot["volume"])+" un. · prazo "+label(lot["prazo"])
@@ -722,6 +720,8 @@ elif page == "Simulador de decisões":
             st.warning("Cenário matemático, não autorização de alteração. Confirme contratos, capacidade, insumos e lotes mínimos antes de agir.")
         else:
             st.warning("Esta ação não cabe no horizonte de planejamento disponível.")
+    st.button("Comparar impacto em unidades e fill rate",key="impact_from_sim",
+              on_click=navigate,args=("Impacto operacional",product))
 
 elif page == "Impacto operacional":
     st.title("Impacto operacional")
