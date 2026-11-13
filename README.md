@@ -1,3 +1,23 @@
+## Validação histórica dos alertas (2026-11-13)
+
+A nova seção **Validação histórica dos alertas**, acessível pelo menu lateral, reconstrói retrospectivamente o que um modelo teria previsto em cada fechamento, usando o Triângulo histórico e seus meses disponíveis. Os valores são reprocessados, e **não equivalem a alertas originalmente persistidos**: esta versão ainda não armazena o modelo aprovado por fechamento nem a previsão emitida na operação real.
+
+- **Previsões versus realizados:** previsão do mês-alvo na origem, venda realizada recuperada da revisão seguinte, erro absoluto/percentual e estoque da revisão posterior.
+- **Cobertura observada:** exclusivamente vendas realizadas posteriores. Marca excesso como verificável somente quando há estoque registrado e informação suficiente para saber se a cobertura alcançou 180 dias. Se as vendas futuras estiverem incompletas, permanece **pendente**, sem completar com previsões.
+- **Ruptura:** não conclui ruptura ou acerto sem dado real de venda perdida. Estoque zerado, por si só, não comprova perda de venda.
+- **Antecedência da decisão:** mostra quantos meses antes do risco o alerta foi reconstruído, o próximo prazo teórico de lote e se havia lote positivo modificável pelo critério de lead time (sem assegurar viabilidade contratual).
+- **Sem contagem dupla:** indicadores resumidos usam a primeira emissão por produto × mês-alvo × tipo de risco. Existe tabela expandida com todos os fechamentos, inclusive alertas repetidos.
+- **Arquivo e data separados:** selecione a revisão histórica que deseja reconstruir e a data de dados posteriores disponível para verificação. A página permite avaliar maio/26 sem ter que apagar os meses seguintes da planilha.
+- **Exportações:** previsões × realizados e primeiros alertas em CSV, sem envio de dados ao repositório.
+
+Cuidado metodológico: o Triângulo deve conter as revisões originais. Para considerar o estoque da revisão seguinte como efetivamente realizado, **é necessário confirmar essa convenção com a L'Oréal**. A avaliação da cobertura observada pode permanecer indefinida até existirem seis meses de vendas futuras conhecidas, mesmo que estoques registrados pareçam altos.
+
+```bash
+PYTHONPATH=. python tests/test_historical_validation.py
+```
+
+---
+
 # Smart Launch — Central de Alertas (interface clara, novembro/2026)
 
 **Execute:** `streamlit run app.py`. A interface atual usa **seis áreas** em menu lateral e só apresenta valores calculados a partir do Triângulo carregado. O app original de quatro/cinco abas foi preservado em `smartlaunch_app.py`, enquanto o motor compartilhado foi extraído para `smartlaunch_core.py`.
