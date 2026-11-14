@@ -15,6 +15,7 @@ from smartlaunch_core import (
 )
 from smartlaunch_monthly import evaluate_models
 from smartlaunch_priority import card_summary
+from smartlaunch_supply import future_lots, supply_diagnosis
 from smartlaunch_impact import (editable_lots, outcome_metrics, evaluate_lot_options,
                                 historical_mape_vs_official)
 from smartlaunch_validation import (
@@ -190,26 +191,65 @@ def rows_from_sim(res):
 
 
 def eligible_lots(res, close):
-    lots = []
+    """Adapta o diagnóstico compartilhado ao formato histórico do simulador."""
+    return [{
+        "índice": lot["index"], "mês": lot["month"], "volume": lot["units"],
+        "prazo": lot["deadline"], "alterável": lot["available_for_analysis"],
+        "mês_limite": lot["boundary"], "situação": lot["situation"],
+    } for lot in future_lots(res, close)]
+
+
+def supply_plan_table(res, close):
+    """Mostra inclusive meses sem lote positivo, para explicar por que não há corte."""
+    values = []
+    future = {lot["index"]: lot for lot in future_lots(res, close)}
     for j, month in enumerate(res["months"]):
-        volume = float(res["production"][j])
-        if volume <= 0:
+        if month <= close:
             continue
-        deadline = month - res["ltm"]
-        lots.append({
-            "índice": j, "mês": month, "volume": volume,
-            "prazo": deadline, "alterável": deadline > close,
+        volume = float(res["production"][j])
+        lot = future.get(j)
+        values.append({
+            "Mês de entrega/produção": label(month),
+            "Produção planejada (un.)": round(volume) if np.isfinite(volume) else None,
+            "Mês-limite pelo LT": label(lot["deadline"]) if lot else "—",
+            "Situação": lot["situation"] if lot else
+                        ("Sem lote positivo registrado" if np.isfinite(volume) and volume <= 0
+                         else "Volume inválido / ausente"),
         })
-    return lots
+    return pd.DataFrame(values)
 
 
 def classify_action(res, close, risk_month, risk_type):
-    doable = any(lot["alterável"] and lot["mês"] <= risk_month for lot in eligible_lots(res, close))
-    if doable:
-        return "Avaliar fornecedor", "Existe lote futuro ainda dentro do prazo teórico para alteração."
+    lots = eligible_lots(res, close)
+    timely = [lot for lot in lots if lot["alterável"] and lot["mês"] <= risk_month]
+    if timely:
+        if all(lot["mês_limite"] for lot in timely):
+            return "Confirmar fornecedor", (
+                "Lote no mês-limite estimado pelo lead time. "
+                "Simular é possível; mudar depende da data exata de corte."
+            )
+        return "Avaliar fornecedor", (
+            "Existe lote positivo antes do risco e ainda com prazo teórico futuro. "
+            "Confirmar possibilidade contratual."
+        )
     if risk_type == "excesso":
-        return "Avaliação comercial", "Não há lote alterável a tempo para mitigar o risco identificado."
-    return "Monitorar e avaliar alocação", "Não há lote alterável que chegue antes do mês de risco."
+        if not lots:
+            return "Avaliação comercial", (
+                "Nenhuma produção futura positiva está no Triângulo; o excesso "
+                "não se resolve cancelando lotes inexistentes."
+            )
+        if any(lot["mês"] > risk_month for lot in lots):
+            return "Ação comercial + revisar futuro", (
+                "Os lotes chegam após o primeiro excesso: não eliminam o estoque "
+                "já acumulado, mas podem ser revistos para meses posteriores."
+            )
+        return "Avaliação comercial", (
+            "Os lotes anteriores ao excesso passaram do prazo teórico. "
+            "Confirmar exceções junto ao fornecedor."
+        )
+    return "Monitorar e avaliar alocação", (
+        "Não há lote positivo com prazo teórico que chegue antes deste mês de ruptura."
+    )
 
 
 def risk_plot(res, rowset, column, color):
@@ -399,8 +439,8 @@ if nav == "Análise do produto":
                  if ex_peak is not None else "—")
         b.metric("Maior chance de ruptura", str(ru_peak["Ruptura (%)"]).replace(".", ",") + "%"
                  if ru_peak is not None else "—")
-        c.metric("Prazo teórico do lote", label(summary["deadline"])
-                 if summary["alert"] and summary["deadline"] is not None else "Sem prazo útil")
+        c.metric("Lotes futuros positivos", summary.get("future_lot_count", 0))
+        st.caption("**Produção e prazo:** " + summary["supply_note"])
         if summary["alert"]:
             st.info("**Próximo encaminhamento: " + summary["action"] + ".** " + summary["suggested"])
             st.caption("Primeiro risco: " + summary["type"].lower() + " em " +
@@ -524,6 +564,7 @@ if page == "Visão geral":
                 st.caption("Não há gatilho dentro da janela crítica. "
                            "Reavaliar no próximo fechamento.")
             st.caption("Modelo operacional: " + st.session_state["operational_"+product])
+            st.caption("Situação da produção: " + summary["supply_note"])
 
     if ready_count < len(MODEL):
         st.info("Produtos sem simulação válida: " +
@@ -740,34 +781,42 @@ elif page == "Simulador de decisões":
         st.stop()
     st.caption("Produto "+product+" · Fechamento "+label(close)+
                " · lead time arredondado: "+str(res["ltm"])+" meses.")
+    status=supply_diagnosis(res,close)
     lots=eligible_lots(res,close)
-    if lots:
-        st.subheader("Lotes e prazos operacionais")
-        lotstable=pd.DataFrame([{
-            "Mês do lote":label(lot["mês"]),
-            "Quantidade (un.)":round(lot["volume"]),
-            "Prazo teórico":label(lot["prazo"]),
-            "Situação":"Alterável pelo LT" if lot["alterável"] else "Prazo vencido",
-        } for lot in lots])
-        st.dataframe(lotstable,hide_index=True,use_container_width=True)
-    else:
-        st.info("Nenhum lote de produção futura identificado.")
+    st.markdown("**Situação do plano de produção**")
+    st.info(status["guidance"])
+    with st.expander("Ver lotes planejados e meses sem produção", expanded=not bool(lots)):
+        st.dataframe(supply_plan_table(res,close),hide_index=True,use_container_width=True)
+        st.caption("Lotes positivos do Triângulo; pedidos não registrados e dias "
+                   "exatos de corte não são conhecidos pela ferramenta.")
     open_lots=[lot for lot in lots if lot["alterável"]]
     if not open_lots:
-        st.error("Não existem lotes alteráveis pelo prazo de fornecimento neste fechamento.")
-        st.info("Ação junto ao fornecedor indisponível. Avaliar encaminhamento comercial ou monitoramento.")
-        st.caption("Não exibimos cortes de lote como executáveis após o vencimento do prazo.")
+        if not lots:
+            st.warning("Não há lote positivo futuro no horizonte carregado. "
+                       "Não existe produção registrada a cancelar; a análise deve "
+                       "considerar o estoque acumulado e eventual ação comercial.")
+        else:
+            st.warning("Existem lotes positivos futuros, mas seus prazos teóricos "
+                       "já passaram. Confirmar exceções com Suprimentos.")
     else:
-        st.success(str(len(open_lots))+" lote(s) ainda dentro do prazo teórico. A possibilidade contratual depende da L'Oréal.")
+        if status["boundary"]:
+            st.warning("Lotes no mês-limite aparecem para simulação hipotética. "
+                       "A mudança só pode ser solicitada após verificar a data "
+                       "real de corte do fornecedor.")
+        st.success(str(len(open_lots)) + " lote(s) para avaliação: prazo futuro "
+                   "ou mês-limite sujeito a confirmação. Nenhuma alteração é executada.")
         names={lot["índice"]: label(lot["mês"])+" · "+fmt(lot["volume"])+" un. · prazo "+label(lot["prazo"])
                for lot in open_lots}
         selected=st.selectbox("Lote para análise",list(names),format_func=lambda i:names[i])
         selected_lot=next(lot for lot in open_lots if lot["índice"]==selected)
-        st.write("**Último mês teórico de intervenção:** "+label(selected_lot["prazo"]))
+        st.write("**Mês-limite estimado:** "+label(selected_lot["prazo"]))
+        if selected_lot["mês_limite"]:
+            st.warning("Este fechamento coincide com o mês-limite: não é possível "
+                       "afirmar que a mudança ainda será aceita sem data de corte.")
         actions=["Manter lote","Reduzir 25%","Reduzir 50%","Cancelar lote","Aumentar 25%"]
         if selected+1<len(res["months"]):
             actions.append("Adiar 1 mês")
-        if selected>0 and res["months"][selected-1]-res["ltm"]>close:
+        if selected>0 and res["months"][selected-1]-res["ltm"]>=close:
             actions.append("Antecipar 1 mês")
         choice=st.radio("Comparar alternativa",actions,horizontal=True,key="lot_action")
         plan=scenario_plan(res,selected,choice)
@@ -810,7 +859,8 @@ elif page == "Impacto operacional":
         show_available_forecast(product,close,blocks)
         st.stop()
 
-    st.markdown("**Escolha o mês-alvo e avalie apenas lotes que ainda podem ser alterados.**")
+    st.markdown("**Compare o impacto de lotes futuros registrados no Triângulo.** "
+                "Prazo futuro ou mês-limite não significa alteração autorizada.")
     active_months=[(i,m) for i,m in enumerate(res["months"]) if bool(res["active"][i])]
     if not active_months:
         st.warning("A janela crítica não contém meses avaliáveis.")
@@ -825,6 +875,7 @@ elif page == "Impacto operacional":
         format_func=lambda idx:label(res["months"][idx]),
         key="impact_target"
     )
+    status=supply_diagnosis(res,close)
     eligible=editable_lots(res,close)
     initial=outcome_metrics(res,res["production"],month_idx)
     st.caption(
@@ -844,15 +895,31 @@ elif page == "Impacto operacional":
         )
     st.caption("Vendas perdidas e fill rate são calculados somente sobre os "
                "meses da janela crítica, usando a mesma demanda em todos os planos.")
+    st.markdown("**Diagnóstico de abastecimento:** " + status["situation"])
+    st.caption(status["guidance"])
+    with st.expander("Ver plano futuro, inclusive meses sem produção", expanded=not bool(status["lots"])):
+        st.dataframe(supply_plan_table(res,close),hide_index=True,use_container_width=True)
+        st.caption("O plano carregado não comprova a inexistência de outros pedidos "
+                   "ou contratos. A simulação não cancela lotes automaticamente.")
     if not eligible:
-        st.warning(
-            "Nenhum lote positivo tem prazo teórico de alteração ainda aberto. "
-            "Por isso, não mostramos cortes de produção como alternativas executáveis."
-        )
-        st.info("O diagnóstico de excesso e serviço permanece disponível. "
-                "Para reduzir exposição já comprometida, avalie ações comerciais "
-                "e confirme possibilidades extraordinárias com o fornecedor.")
+        if not status["lots"]:
+            st.warning(
+                "Não há lotes positivos futuros no Triângulo até " +
+                (label(status["last_month"]) if status["last_month"] is not None else
+                 "o fim do horizonte") +
+                ". O excesso esperado resulta do estoque e da demanda projetada, "
+                "não de um lote futuro a cancelar. Avalie ações comerciais."
+            )
+        else:
+            st.warning(
+                "Há produção futura registrada, mas todos os meses-limite estão "
+                "antes do fechamento. Não indicamos cortes como executáveis; "
+                "confirme possíveis exceções com Suprimentos."
+            )
     else:
+        if status["boundary"]:
+            st.caption("Lotes cujo mês-limite coincide com o fechamento podem ser "
+                       "comparados hipoteticamente. A data contratual deve ser confirmada.")
         lot_names={
             lot["index"]:label(lot["month"])+" · "+fmt(lot["units"])+" un. · prazo "+label(lot["deadline"])
             for lot in eligible
@@ -862,8 +929,16 @@ elif page == "Impacto operacional":
             format_func=lambda i:lot_names[i],key="impact_lot"
         )
         lot=next(x for x in eligible if x["index"]==chosen_lot)
-        st.caption("Alterabilidade avaliada somente pelo lead time arredondado. "
-                   "Prazo e restrições contratuais precisam de confirmação da L'Oréal.")
+        st.caption("Elegibilidade por competência mensal: antes do mês-limite ou "
+                   "no próprio mês-limite (dependendo da data exata). "
+                   "Contrato, capacidade e corte diário precisam de confirmação.")
+        if lot["boundary"]:
+            st.warning("Mês-limite do lote coincide com o fechamento. "
+                       "Esta comparação NÃO comprova que o fornecedor aceitará a alteração.")
+        if lot["month"] > res["months"][month_idx]:
+            st.info("Este lote chega após o mês-alvo. Reduzi-lo não retira o estoque "
+                    "já existente naquele mês; escolha um alvo posterior para estudar "
+                    "seu efeito na acumulação futura.")
         candidates,baseline=evaluate_lot_options(res,chosen_lot,month_idx)
         chosen_option=st.selectbox(
             "Alternativa a comparar",candidates["Alternativa"].tolist(),
