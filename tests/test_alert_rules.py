@@ -36,7 +36,7 @@ assert bool(frame.loc[2,"Alerta ruptura"])
 lots=ns["eligible_lots"](result,close)
 assert [x["alterável"] for x in lots]==[False,True], lots
 act,_=ns["classify_action"](result,close,months[0],"excesso")
-assert act=="Avaliação comercial"
+assert act=="Ação comercial + revisar futuro", "Lote de setembro não resolve o excesso de julho"
 act,_=ns["classify_action"](result,close,months[2],"excesso")
 assert act=="Avaliar fornecedor"
 
