@@ -15,6 +15,7 @@ from smartlaunch_core import (
 )
 from smartlaunch_monthly import evaluate_models
 from smartlaunch_priority import card_summary
+from smartlaunch_metrics import current_alert_opportunities, compare_verified_excess
 from smartlaunch_supply import future_lots, supply_diagnosis
 from smartlaunch_impact import (editable_lots, outcome_metrics, evaluate_lot_options,
                                 historical_mape_vs_official)
@@ -514,14 +515,38 @@ if page == "Visão geral":
         })
     snapshots.sort(key=lambda x:(x.get("priority",4),x["product"]))
 
+    opportunities = current_alert_opportunities(results,close,threshold=LIMIT_ALERT,
+                                                 coverage_limit=LIM)
     metric_cols=st.columns(4)
     metric_cols[0].metric("Produtos analisados",f"{ready_count}/{len(MODEL)}")
     metric_cols[1].metric("Com sinal de excesso",f"{alert_excess}/{ready_count}" if ready_count else "—")
     metric_cols[2].metric("Com sinal de ruptura",f"{alert_shortage}/{ready_count}" if ready_count else "—")
-    metric_cols[3].metric("Com prazo teórico de ação",supplier_actions if ready_count else "—")
-    st.caption("Sinal = evento acima de 2,5% nos cenários da janela crítica. "
-               "Prazo teórico não confirma renegociação contratual; "
-               "ausência de simulação não é ausência de risco.")
+    metric_cols[3].metric("Alertas com oportunidade pelo LT",
+                          f'{opportunities["possible"]}/{opportunities["total"]}'
+                          if opportunities["total"] else "—")
+    if opportunities["total"]:
+        st.caption(
+            f'{opportunities["rate"]:.1f}% dos alertas de produto × mês-alvo × risco '
+            "têm um lote positivo que chega até o risco e prazo futuro "
+            "ou no mês-limite. "
+            f'{opportunities["future"]} com prazo teórico futuro; '
+            f'{opportunities["boundary"]} no mês-limite (data de corte a confirmar).'
+        )
+        with st.expander("Quais alertas têm oportunidade pelo lead time?"):
+            opportunity_view = pd.DataFrame(opportunities["rows"]).copy()
+            opportunity_view["Mês-alvo"] = opportunity_view["Mês-alvo"].map(label)
+            opportunity_view["Mês-limite"] = opportunity_view["Mês-limite"].map(
+                lambda month: label(month) if month is not None else "—")
+            st.dataframe(opportunity_view[
+                ["Produto","Mês-alvo","Tipo de risco","Probabilidade (%)",
+                 "Situação do prazo","Mês-limite"]
+            ],hide_index=True,use_container_width=True)
+    else:
+        st.caption("Nenhum alerta probabilístico na janela crítica dos produtos "
+                   "com simulação válida. A taxa de oportunidades não é calculável.")
+    st.caption("Sinal = probabilidade acima de 2,5% na janela crítica. "
+               "Oportunidade pelo LT NÃO é um alerta confirmado, nem autorização de "
+               "produção. Uma ausência de simulação não significa risco zero.")
 
     st.subheader("Prioridades para o planejamento")
     for item in snapshots:
@@ -592,6 +617,12 @@ if page == "Visão geral":
     priorities_file=BytesIO()
     with pd.ExcelWriter(priorities_file,engine="openpyxl") as writer:
         pd.DataFrame(decisions).to_excel(writer,sheet_name="Prioridades",index=False)
+        if opportunities["rows"]:
+            detail_op = pd.DataFrame(opportunities["rows"]).copy()
+            detail_op["Mês-alvo"] = detail_op["Mês-alvo"].map(label)
+            detail_op["Mês-limite"] = detail_op["Mês-limite"].map(
+                lambda month: label(month) if month is not None else "—")
+            detail_op.to_excel(writer,sheet_name="Prazo dos alertas",index=False)
     st.download_button("Baixar resumo do fechamento (Excel)",
         priorities_file.getvalue(),
         file_name="smartlaunch_prioridades_"+label(close).replace("/","-")+".xlsx",
@@ -1175,6 +1206,91 @@ elif page == "Valor demonstrado":
              "plano oficial ainda não sinalizava. Nos dois episódios adicionais "
              "fora da amostra, os primeiros alertas chegaram com seis e oito meses "
              "de antecedência, antes do prazo teórico de fornecimento.")
+    st.caption("Comparação do estudo: episódios de excesso identificados (2/3 versus "
+               "0/3), não um teste de superioridade estatística universal. "
+               "As antecedências de seis e oito meses são dos dois episódios adicionais.")
+    st.markdown("#### Conferir o valor incremental com o Triângulo enviado")
+    st.write("Compare, para um mesmo mês de excesso **verificável**, quando teria "
+             "surgido o primeiro alerta pela previsão em uso e pela previsão Oficial, "
+             "aplicando a **mesma regra de risco do Smart Launch** às duas. "
+             "Isso não é uma reconstrução de decisões reais da L'Oréal.")
+    historical_product=st.selectbox(
+        "Produto para comparação retrospectiva",list(MODEL),
+        key="incremental_product"
+    )
+    historical_close=latest_verifiable_close(blocks,historical_product)
+    model_now=st.session_state["operational_"+historical_product]
+    st.caption("Modelo em uso: "+model_now+
+               " · Referência: previsão Oficial + simulador Smart Launch. "
+               "Mesmas revisões, até oito origens e horizonte de nove meses.")
+    if historical_close is None:
+        st.info("Não há fechamento verificável para o produto selecionado.")
+    else:
+        comparison_key=(
+            st.session_state["data_digest"],historical_product,
+            str(historical_close),model_now
+        )
+        if st.button("Comparar primeiros alertas com a previsão Oficial",
+                     key="run_incremental"):
+            try:
+                with st.spinner("Reconstruindo as duas previsões em origens iguais..."):
+                    sm_projections,sm_alerts,_=reconstruct_history(
+                        historical_product,historical_close,blocks,base,
+                        model=model_now,max_origins=8,max_horizon=9,
+                        method=DEFAULT_METHOD,persistent=False
+                    )
+                    if model_now == "Oficial":
+                        official_alerts=sm_alerts
+                    else:
+                        _,official_alerts,_=reconstruct_history(
+                            historical_product,historical_close,blocks,base,
+                            model="Oficial",max_origins=8,max_horizon=9,
+                            method=DEFAULT_METHOD,persistent=False
+                        )
+                    compared=compare_verified_excess(
+                        sm_projections,sm_alerts,official_alerts
+                    )
+                st.session_state["incremental_result"]=compared
+                st.session_state["incremental_result_key"]=comparison_key
+                st.session_state.pop("incremental_error",None)
+            except (ValueError,KeyError,IndexError,TypeError) as exc:
+                st.session_state["incremental_error"]=str(exc)
+                st.session_state.pop("incremental_result_key",None)
+        if st.session_state.get("incremental_error") and st.session_state.get(
+            "incremental_result_key")!=comparison_key:
+            st.warning("Comparação não disponível: "+
+                       st.session_state["incremental_error"])
+        if st.session_state.get("incremental_result_key")==comparison_key:
+            compared=st.session_state["incremental_result"]
+            if compared.empty:
+                st.info("Nenhum mês com excesso verificável foi encontrado nesse "
+                        "recorte. Não é correto concluir que o risco não existiu.")
+            else:
+                m1,m2,m3=st.columns(3)
+                m1.metric("Meses com excesso verificável",len(compared))
+                m2.metric("Smart: aviso com oportunidade teórica",
+                          int(compared["Smart: oportunidade pelo LT"].sum()))
+                m3.metric("Oficial*: aviso com oportunidade teórica",
+                          int(compared["Oficial*: oportunidade pelo LT"].sum()))
+                st.dataframe(compared,hide_index=True,use_container_width=True)
+                st.caption("O aviso é o primeiro para cada mês-alvo, dentro do "
+                           "recorte reconstruído. Antecedência = mês-alvo menos "
+                           "fechamento do primeiro alerta. Oportunidade = prazo pelo "
+                           "lead time, incluindo mês-limite sujeito à data de corte. "
+                           "Não comprova que o pedido seria alterável.")
+                data_cmp=compared.to_csv(index=False).encode("utf-8-sig")
+                st.download_button(
+                    "Baixar comparação dos alertas (CSV)",data_cmp,
+                    file_name="comparacao_alertas_"+historical_product+".csv",
+                    mime="text/csv"
+                )
+            if model_now=="Oficial":
+                st.info("Neste produto o modelo operacional já é o Oficial. "
+                        "As duas colunas representam a mesma previsão; "
+                        "não há um modelo alternativo para comparar.")
+    st.caption("*Oficial significa a previsão registrada no Triângulo combinada "
+               "ao motor de riscos do Smart Launch, e NÃO a política completa de "
+               "decisão executada pela empresa.")
     d,e=st.columns(2)
     d.metric("B_1 · redução potencial no pior mês","83%")
     e.metric("C_2 · redução potencial no pior mês","46%")
