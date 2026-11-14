@@ -63,21 +63,25 @@ def observed_cover(stock, month, realized, max_close, limit=180):
 
 
 def deadlines_for_risk(production, months, origin, risk_month, ltm):
-    """Prazo por mês de lote, com regra estrita: deadline > origem.
+    """Prazo teórico por lote positivo que chega até o mês do risco.
 
-    É uma elegibilidade TEMPORAL, não garantia de capacidade/contrato.
-    Apenas lotes com data de chegada/produção <= mês do risco importam.
+    O mês limite (deadline == origin) é apenas uma oportunidade A CONFIRMAR:
+    o Triângulo não traz a data diária de corte do fornecedor. O indicador
+    não é prova de oportunidade contratual ou mudança efetivamente executada.
     """
     relevant = []
     for month, volume in zip(months, production):
-        if month <= risk_month and volume > 0:
+        if month <= risk_month and np.isfinite(volume) and volume > 0:
             relevant.append(month - ltm)
     if not relevant:
-        return "Sem lote até o risco", None, False
-    open_deadlines = sorted(x for x in relevant if x > origin)
-    if open_deadlines:
-        return "Em tempo pelo LT (a confirmar)", min(open_deadlines), True
-    return "Fora do prazo pelo LT", max(relevant), False
+        return "Sem lote positivo até o risco", None, False
+    future = sorted(x for x in relevant if x > origin)
+    boundary = sorted(x for x in relevant if x == origin)
+    if future:
+        return "Prazo futuro pelo LT (confirmar contrato)", future[0], True
+    if boundary:
+        return "Mês-limite (confirmar data de corte)", boundary[0], True
+    return "Prazo teórico encerrado", max(relevant), False
 
 
 def available_origin_reviews(blocks, product, as_of_close):
