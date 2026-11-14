@@ -54,8 +54,10 @@ assert extrap==6
 assert np.allclose(six,6*dm[:,-1])
 assert outcome_metrics(res,res["production"],8)["extrapolated_months"]==6
 
-# A elegibilidade temporal deve bloquear lotes vencidos.
-assert not editable_lots(res,pd.Period("2026-05",freq="M"))
+# O mês-limite é incluído apenas para comparação: depende da data de corte.
+boundary = editable_lots(res,pd.Period("2026-05",freq="M"))
+assert len(boundary)==1 and boundary[0]["boundary"]
+assert not editable_lots(res,pd.Period("2026-06",freq="M"))
 
 # O benchmark Oficial usa os mesmos pares de fechamento e alvo.
 d=pd.DataFrame([
