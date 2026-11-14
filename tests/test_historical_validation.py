@@ -37,11 +37,16 @@ lots=np.array([100.,100.,100.])
 state,deadline,can=deadlines_for_risk(lots,lot_months,origin,m("2026-08"),2)
 assert can and deadline==m("2026-05"), (state,deadline,can)
 state,deadline,can=deadlines_for_risk(lots,lot_months,origin,m("2026-05"),2)
-assert not can and state=="Fora do prazo pelo LT"
+assert not can and state=="Prazo teórico encerrado"
 state,deadline,can=deadlines_for_risk(lots,lot_months,origin,m("2026-08"),4)
 assert not can
+# No mês limite, reportar oportunidade teórica sujeita a data de corte.
+state,deadline,can=deadlines_for_risk(
+    np.array([100.]),[m("2026-11")],m("2026-07"),m("2026-11"),4
+)
+assert can and deadline==m("2026-07") and "Mês-limite" in state
 state,deadline,can=deadlines_for_risk(np.array([0.,0.,100.]),lot_months,origin,m("2026-08"),2)
-assert state=="Sem lote até o risco"
+assert state=="Sem lote positivo até o risco"
 
 # O mesmo alerta emitido em duas origens para o mesmo alvo conta UMA vez.
 d=pd.DataFrame([
