@@ -22,7 +22,7 @@ from smartlaunch_validation import (
     available_origin_reviews, EVENT_YES, EVENT_NO,
 )
 
-st.set_page_config(page_title="Smart Launch | Central de Alertas", page_icon="📦", layout="wide")
+st.set_page_config(page_title="Smart Launch | Decisões de abastecimento", page_icon="📦", layout="wide")
 st.markdown("""
 <style>
 :root {color-scheme:light;}
@@ -64,17 +64,35 @@ div[data-testid="stAlert"] {border-radius:12px;}
 </style>
 """, unsafe_allow_html=True)
 
-NAV = [
-    "Visão geral", "Atualização mensal", "Previsão e modelos",
-    "Riscos de estoque", "Simulador de decisões", "Impacto operacional",
-    "Validação histórica dos alertas", "Histórico e metodologia",
-]
+NAV = ["Central de decisões", "Análise do produto", "Resultados e confiabilidade"]
+PRODUCT_VIEWS = ["Decisão e alternativas", "Riscos por mês", "Previsão × Oficial", "Simular lote específico"]
+RESULT_VIEWS = ["Valor demonstrado", "Validação por fechamento", "Metodologia e auditoria"]
+LEGACY_PRODUCT = {
+    "Impacto operacional": "Decisão e alternativas",
+    "Riscos de estoque": "Riscos por mês",
+    "Previsão e modelos": "Previsão × Oficial",
+    "Simulador de decisões": "Simular lote específico",
+}
+LEGACY_RESULTS = {
+    "Validação histórica dos alertas": "Validação por fechamento",
+    "Histórico e metodologia": "Metodologia e auditoria",
+}
 DEFAULT_METHOD = "Normal (0, s)"
 LIMIT_ALERT = 0.025
 
 
 def navigate(page, product=None):
-    st.session_state["nav_page"] = page
+    """Navegação compatível com os links da versão anterior, com 3 áreas visíveis."""
+    if page in LEGACY_PRODUCT:
+        st.session_state["nav_page"] = "Análise do produto"
+        st.session_state["product_view"] = LEGACY_PRODUCT[page]
+    elif page in LEGACY_RESULTS:
+        st.session_state["nav_page"] = "Resultados e confiabilidade"
+        st.session_state["results_view"] = LEGACY_RESULTS[page]
+    elif page == "Atualização mensal" or page == "Visão geral":
+        st.session_state["nav_page"] = "Central de decisões"
+    else:
+        st.session_state["nav_page"] = page
     if product is not None:
         st.session_state["selected_product"] = product
 
@@ -105,9 +123,9 @@ def update_uploaded_file(uploaded):
 
 
 def explain_empty():
-    st.info("Carregue o Triângulo atualizado para gerar previsões, comparar modelos e mostrar alertas reais. Nenhum valor demonstrativo será exibido.")
-    if st.button("Ir para atualização mensal", type="primary", on_click=navigate, args=("Atualização mensal",)):
-        pass
+    st.info("Para começar, envie a versão mensal do Triângulo de Produtos. A análise será feita com os dados do arquivo, sem números demonstrativos.")
+    uploaded = st.file_uploader("Carregar Triângulo de Produtos (.xlsx)", type=["xlsx"], key="main_upload")
+    update_uploaded_file(uploaded)
 
 
 def preview_forecast(product, close, blocks, operational_model):
@@ -265,28 +283,32 @@ def scenario_plan(res, index, action):
     return plan
 
 
+if st.session_state.get("nav_page") not in NAV:
+    st.session_state["nav_page"] = NAV[0]
+if st.session_state.get("product_view") not in PRODUCT_VIEWS:
+    st.session_state["product_view"] = PRODUCT_VIEWS[0]
+if st.session_state.get("results_view") not in RESULT_VIEWS:
+    st.session_state["results_view"] = RESULT_VIEWS[0]
+
 with st.sidebar:
     st.markdown("## Smart Launch")
-    st.caption("Apoio à decisão em lançamentos")
+    st.caption("L'Oréal | Decisões de abastecimento")
     st.divider()
-    page = st.radio("Navegação", NAV, key="nav_page", label_visibility="collapsed")
+    nav = st.radio("Navegação", NAV, key="nav_page", label_visibility="collapsed")
     st.divider()
-    uploaded_sidebar = st.file_uploader("Atualizar Triângulo", type=["xlsx"], key="sidebar_upload")
+    st.markdown("**Dados do fechamento**")
+    uploaded_sidebar = st.file_uploader("Carregar / atualizar Triângulo", type=["xlsx"], key="sidebar_upload")
     update_uploaded_file(uploaded_sidebar)
-    st.caption("Os dados ficam na sessão Streamlit. Não use hospedagem pública sem controle de acesso.")
-
-if page == "Atualização mensal":
-    st.title("Atualização mensal")
-    st.write("Carregue a nova versão do Triângulo. O processamento utiliza os dados disponíveis em cada fechamento.")
-    uploaded_main = st.file_uploader("Arquivo Triângulo (.xlsx)", type=["xlsx"], key="main_upload")
-    update_uploaded_file(uploaded_main)
+    st.caption("O arquivo é usado apenas na sessão. Hospedagem pública não deve receber dados confidenciais sem controle de acesso.")
 
 file = st.session_state.get("triangulo_file_bytes")
 if file is None:
-    if page != "Atualização mensal":
-        st.title("Central de Alertas" if page=="Visão geral" else page)
+    st.title("Central de decisões")
+    st.write("Identifique excesso de estoque, verifique se ainda há prazo e compare alternativas sem criar rupturas.")
     explain_empty()
-    st.stop()
+    file = st.session_state.get("triangulo_file_bytes")
+    if file is None:
+        st.stop()
 
 try:
     base, blocks = load_data(file)
@@ -341,23 +363,74 @@ for product in MODEL:
 ready_count = sum(x is not None for x in results.values())
 status = "Processamento completo" if ready_count==len(MODEL) else "Processamento parcial"
 file_name = st.session_state.get("triangulo_file_name","Triângulo carregado na sessão")
-st.caption("Fechamento: " + label(close) + "   ·   Revisão: " + label(review) +
-           "   ·   " + status + "   ·   Arquivo: " + file_name)
-if ready_count < len(MODEL):
-    st.warning("Probabilidades não calculadas para " +
-               ", ".join(p for p in MODEL if results[p] is None) +
-               ". Sem simulação válida NÃO significa risco zero.")
-    with st.expander("Entender por que a simulação está indisponível"):
-        st.caption("O Smart Launch usa a venda do mês m na revisão m+1. "
-                   "Se o último registro é mar/26, a última venda confirmada pelo "
-                   "método pode ser fev/26. Para avaliar o fechamento de mar/26, "
-                   "é necessária a revisão abr/26.")
-        for product in MODEL:
-            if results[product] is None:
-                st.write("**" + product + ":** " + errors.get(product, "Sem dados suficientes"))
-        st.caption("Mesmo com uma previsão central disponível, a simulação "
-                   "precisa de pelo menos dois erros históricos elegíveis do arranque. "
-                   "Não preenchemos probabilidades com valores fictícios.")
+with st.sidebar:
+    st.caption("Fechamento: " + label(close) + " · Revisão: " + label(review))
+    st.caption(status + " · " + file_name)
+    if ready_count < len(MODEL):
+        with st.expander("Diagnóstico de simulações indisponíveis"):
+            st.warning("Não calculado não significa risco zero.")
+            for product in MODEL:
+                if results[product] is None:
+                    st.write("**" + product + ":** " + errors.get(product, "Dados insuficientes"))
+            st.caption("As vendas do mês m são recuperadas na revisão m+1. Pelo menos dois erros históricos são necessários para simular.")
+
+page = nav
+if nav == "Análise do produto":
+    st.title("Decisão de abastecimento · " + chosen)
+    st.caption("Fechamento " + label(close) + " · Modelo em uso: " +
+               st.session_state["operational_" + chosen] +
+               " · Resultados condicionais aos dados e às premissas do Triângulo.")
+    current = results[chosen]
+    if current is None:
+        st.warning("Não há probabilidade confiável para " + chosen +
+                   ": " + errors.get(chosen, "Evidência insuficiente"))
+        show_available_forecast(chosen, close, blocks)
+    else:
+        summary = card_summary(chosen, current, close)
+        frame_product = rows_from_sim(current)
+        active = frame_product[frame_product["Janela crítica"]]
+        ex_peak = active.loc[active["Excesso (%)"].idxmax()] if not active.empty else None
+        ru_peak = active.loc[active["Ruptura (%)"].idxmax()] if not active.empty else None
+        a,b,c = st.columns(3)
+        a.metric("Maior chance de excesso", str(ex_peak["Excesso (%)"]).replace(".", ",") + "%"
+                 if ex_peak is not None else "—")
+        b.metric("Maior chance de ruptura", str(ru_peak["Ruptura (%)"]).replace(".", ",") + "%"
+                 if ru_peak is not None else "—")
+        c.metric("Prazo teórico do lote", label(summary["deadline"])
+                 if summary["alert"] and summary["deadline"] is not None else "Sem prazo útil")
+        if summary["alert"]:
+            st.info("**Próximo encaminhamento: " + summary["action"] + ".** " + summary["suggested"])
+            st.caption("Primeiro risco: " + summary["type"].lower() + " em " +
+                       label(summary["first_month"]) + " · Pico do mesmo tipo: " +
+                       f'{summary["peak_probability"]*100:.1f}%' +
+                       " em " + label(summary["peak_month"]) +
+                       ". Prazos calculados pelo lead time são teóricos.")
+        else:
+            st.info("Sem gatilho na janela crítica deste fechamento. Mantenha o acompanhamento mensal.")
+        if ex_peak is not None and ru_peak is not None:
+            st.caption("Excesso: pico em " + str(ex_peak["Mês"]) +
+                       " · Ruptura: pico em " + str(ru_peak["Mês"]) +
+                       ". Podem ocorrer em meses diferentes ou em cenários distintos.")
+    selection = st.radio("O que deseja avaliar?", PRODUCT_VIEWS,
+                         key="product_view", horizontal=True)
+    page = {
+        "Decisão e alternativas": "Impacto operacional",
+        "Riscos por mês": "Riscos de estoque",
+        "Previsão × Oficial": "Previsão e modelos",
+        "Simular lote específico": "Simulador de decisões",
+    }[selection]
+elif nav == "Resultados e confiabilidade":
+    st.title("Resultados e confiabilidade")
+    st.caption("Evidências do TCC, limitações e histórico reconstruído — sem confundir simulação com ganho realizado.")
+    choice = st.radio("O que deseja consultar?", RESULT_VIEWS,
+                      key="results_view", horizontal=True)
+    page = {
+        "Valor demonstrado": "Valor demonstrado",
+        "Validação por fechamento": "Validação histórica dos alertas",
+        "Metodologia e auditoria": "Histórico e metodologia",
+    }[choice]
+else:
+    page = "Visão geral"
 
 if page == "Visão geral":
     st.title("Central de Alertas")
