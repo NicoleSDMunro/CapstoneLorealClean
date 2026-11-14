@@ -1,3 +1,13 @@
+# Ajustes do aplicativo — 14/11/2026
+
+A interface atual mantém as seções já publicadas de **Validação histórica dos alertas** e **Impacto operacional**, com os cálculos de excesso, ruptura, fill rate e análise de alternativas de produção.
+
+**Adaptação incorporada do pacote Smart Launch enviado:** além dos arquivos CSV, o painel agora permite baixar arquivos **Excel (.xlsx)** diretamente em duas análises: comparação de alternativas de lotes (Impacto operacional) e riscos do fechamento (Histórico e metodologia). As planilhas são geradas em memória a partir do Triângulo carregado pelo usuário, sem publicação de dados empresariais no repositório.
+
+O ZIP `smartlaunch_app_pronto_github.zip` contém uma implementação independente com motor de simulação e validação. Não foi usado para substituir integralmente o site existente, porque essa substituição excluiria as funcionalidades incorporadas nas atualizações de 13/11/2026. A migração completa do motor do ZIP exige validação de equivalência metodológica e integração dos testes antes da troca.
+
+---
+
 # Impacto Operacional — 2026-11-13
 
 **Nova página** no menu lateral, acessível também pelo simulador. Processa exclusivamente o arquivo Triângulo carregado pelo usuário, sem planilhas empresariais no GitHub.
