@@ -1,3 +1,28 @@
+# Smart Launch — experiência para consultores da L'Oréal (14/11/2026)
+
+**Objetivo da interface:** em cada fechamento, permitir que o planejador responda: qual SKU apresenta risco, em que mês, se ainda existe prazo operacional e qual alternativa mitiga excesso sem provocar ruptura.
+
+A navegação principal tem apenas **três áreas**:
+
+1. **Central de decisões:** apresenta produtos analisados, sinais de excesso e ruptura, encaminhamentos (fornecedor, comercial ou monitoramento), prazo teórico e exportação do resumo do fechamento em Excel.
+2. **Análise do produto:** concentra diagnóstico de P1/P2/P3, risco por mês, previsão em comparação ao Oficial e alternativas de lotes com excesso evitado, vendas perdidas e fill rate. Os detalhes técnicos ficam recolhidos por padrão. A planilha Excel da alternativa inclui resumo para reunião e todas as opções.
+3. **Resultados e confiabilidade:** comunica o benefício **retrospectivo** perante a regra baseada no plano Oficial, o desempenho diferente por produto, os falsos alarmes, as limitações, a validação reconstruída e a auditoria. Os resultados do TCC ficam explicitamente separados dos cálculos feitos a partir do upload.
+
+**Rotina:** carregar a versão mensal do Triângulo na lateral → identificar produtos prioritários → abrir a análise do produto → comparar cenários de decisão → baixar o resumo para reunião.
+
+**Nota de governança:** o Smart Launch é uma camada de apoio ao plano Oficial. Os alertas não autorizam mudanças, os prazos são aproximações mensais e qualquer ação requer confirmação de contrato, capacidade, lote mínimo e política comercial. O TCC demonstrou antecipação retrospectiva em dois de três episódios, mas não redução realizada de estoque; a precisão dos alertas fora da amostra foi de 48%. Estes dados históricos não mudam quando se carrega outro arquivo.
+
+**Testes:** em um ambiente com `pip install -r requirements.txt`:
+
+```bash
+python -m compileall -q app.py smartlaunch_ui.py smartlaunch_core.py smartlaunch_priority.py smartlaunch_impact.py smartlaunch_monthly.py smartlaunch_validation.py
+PYTHONPATH=. python tests/test_smoke.py
+PYTHONPATH=. python tests/test_impact.py
+PYTHONPATH=. python tests/test_ui.py
+```
+
+---
+
 # Ajustes do aplicativo — 14/11/2026
 
 A interface atual mantém as seções já publicadas de **Validação histórica dos alertas** e **Impacto operacional**, com os cálculos de excesso, ruptura, fill rate e análise de alternativas de produção.
