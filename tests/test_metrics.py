@@ -2,7 +2,8 @@
 import numpy as np
 import pandas as pd
 
-from smartlaunch_metrics import current_alert_opportunities, compare_verified_excess
+from smartlaunch_metrics import (current_alert_opportunities, compare_verified_excess,
+                                 format_opportunity_months)
 from smartlaunch_validation import EVENT_YES, EVENT_NO
 
 m = lambda v: pd.Period(v, freq="M")
@@ -29,6 +30,30 @@ assert result["possible"]==3 and result["rate"]==75.0,result
 assert result["rows"][0]["Situação do prazo"]=="Sem lote positivo até o risco"
 assert result["rows"][1]["Situação do prazo"]=="Mês-limite: confirmar corte"
 assert current_alert_opportunities({"P2":None},close)["rate"] is None
+
+# Regressão do KeyError da interface: None torna-se pandas.NaT em coluna PeriodDtype.
+# Ambos os caminhos (tabela Streamlit e aba Excel) compartilham o mesmo formatter.
+raw = pd.DataFrame(result["rows"]).copy()
+assert raw["Mês-limite"].isna().any()
+formatted = format_opportunity_months(raw)
+assert formatted.iloc[0]["Mês-limite"] == "—", formatted
+assert formatted.iloc[1]["Mês-limite"] == "jul/26", formatted
+assert formatted.iloc[0]["Mês-alvo"] == "ago/26", formatted
+assert formatted["Mês-limite"].notna().all()
+assert isinstance(formatted.iloc[0]["Mês-limite"], str)
+# Caso explícito de série period[M] com NaT, como no erro do Streamlit Cloud.
+with_nat = pd.DataFrame({
+    "Mês-alvo":pd.Series([m("2026-08"),m("2026-09")],dtype="period[M]"),
+    "Mês-limite":pd.Series([pd.NaT,m("2026-07")],dtype="period[M]"),
+})
+converted = format_opportunity_months(with_nat)
+assert converted["Mês-limite"].tolist() == ["—","jul/26"]
+import io
+buf=io.BytesIO()
+with pd.ExcelWriter(buf,engine="openpyxl") as writer:
+    formatted.to_excel(writer,sheet_name="Prazo dos alertas",index=False)
+assert buf.getbuffer().nbytes>0
+
 
 # Confirmado: mesma venda/estoque retrospectivos; avisos diferentes.
 observed = pd.DataFrame([

@@ -9,6 +9,27 @@ import pandas as pd
 
 from smartlaunch_supply import future_lots
 from smartlaunch_validation import first_alerts, EVENT_YES
+from smartlaunch_core import label
+
+
+
+def format_opportunity_months(frame):
+    """Formata meses para tabela e exportação, incluindo prazos inexistentes.
+
+    O pandas converte None em NaT ao inferir uma coluna PeriodDtype; NaT não
+    pode ser passado para a função label (que espera um Period válido).
+    """
+    formatted = frame.copy()
+
+    def readable(value):
+        if value is None or pd.isna(value):
+            return "—"
+        return label(value)
+
+    for column in ("Mês-alvo", "Mês-limite"):
+        if column in formatted.columns:
+            formatted[column] = formatted[column].astype(object).map(readable)
+    return formatted
 
 
 def current_alert_opportunities(results, close, threshold=0.025, coverage_limit=180):
