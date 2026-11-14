@@ -89,6 +89,9 @@ def navigate(page, product=None):
     elif page in LEGACY_RESULTS:
         st.session_state["nav_page"] = "Resultados e confiabilidade"
         st.session_state["results_view"] = LEGACY_RESULTS[page]
+    elif page == "Valor demonstrado":
+        st.session_state["nav_page"] = "Resultados e confiabilidade"
+        st.session_state["results_view"] = "Valor demonstrado"
     elif page == "Atualização mensal" or page == "Visão geral":
         st.session_state["nav_page"] = "Central de decisões"
     else:
@@ -605,7 +608,7 @@ elif page == "Atualização mensal":
                "… · O arquivo é processado no servidor da sessão, que deve ter acesso protegido.")
 
 elif page == "Previsão e modelos":
-    st.title("Previsão e modelos")
+    st.subheader("Previsão e modelos")
     st.write("Reavaliar mensalmente o erro histórico sem alterar silenciosamente a previsão operacional.")
     product=chosen
     detail,ranking,winner=rankings[product]
@@ -655,7 +658,7 @@ elif page == "Previsão e modelos":
             st.dataframe(detail,hide_index=True,use_container_width=True)
 
 elif page == "Riscos de estoque":
-    st.title("Riscos de estoque")
+    st.subheader("Evolução dos riscos por mês")
     product=chosen
     res=results[product]
     if res is None:
@@ -729,7 +732,7 @@ elif page == "Riscos de estoque":
         st.info("Ainda não há fechamentos históricos suficientes com simulação válida para mostrar a evolução deste mês-alvo.")
 
 elif page == "Simulador de decisões":
-    st.title("Simulador de decisões")
+    st.subheader("Simular uma intervenção específica")
     product=chosen
     res=results[product]
     if res is None:
@@ -791,7 +794,7 @@ elif page == "Simulador de decisões":
               on_click=navigate,args=("Impacto operacional",product))
 
 elif page == "Impacto operacional":
-    st.title("Impacto operacional")
+    st.subheader("Alternativas de abastecimento")
     st.write("Quanto uma alteração de lote **poderia reduzir o excesso** — e qual risco de perda de vendas ela acrescenta.")
     st.caption("Análise prospectiva de cenários do fechamento " + label(close) +
                ". Benefícios simulados, não economia ou redução real comprovada.")
@@ -1035,8 +1038,67 @@ elif page == "Impacto operacional":
         "restrições contratuais e política de serviço da L'Oréal."
     )
 
+
+elif page == "Valor demonstrado":
+    st.subheader("O que foi comprovado — e o que ainda falta validar")
+    st.caption("RESULTADOS RETROSPECTIVOS DO TCC · cinco lançamentos, três episódios de "
+               "excesso · Valores fixos do estudo, que NÃO se atualizam com o Triângulo enviado.")
+    a,b,c=st.columns(3)
+    a.metric("Episódios antecipados pelo Smart Launch","2 de 3")
+    b.metric("Episódios antecipados pela regra Oficial","0 de 3")
+    c.metric("Precisão dos alertas fora da amostra","48%")
+    st.caption("Um episódio é considerado antecipado quando o alerta chega antes do "
+               "lead time do primeiro mês de excesso. A regra do plano Oficial usa a "
+               "mesma base, sinalizando cobertura a partir de 180 dias. "
+               "A precisão de 48% indica que ainda existem muitos falsos positivos.")
+
+    st.markdown("#### Por que usar o Smart Launch junto ao plano oficial?")
+    st.write("A previsão por analogia funciona como uma **segunda opinião** quando "
+             "o lançamento ainda tem poucas vendas. A camada de simulação serve "
+             "principalmente para testar se um corte de produção cria risco de ruptura. "
+             "O sistema não substitui o plano oficial nem executa mudanças no fornecedor.")
+    st.markdown("**Previsão por produto no estudo (MAPE; menor é melhor)**")
+    accuracy=pd.DataFrame([
+        {"Produto":"P1","MEA (%)":79,"MEA-P (%)":58,"Oficial (%)":124,
+         "Melhor na comparação":"MEA-P"},
+        {"Produto":"P2","MEA (%)":23,"MEA-P (%)":35,"Oficial (%)":31,
+         "Melhor na comparação":"MEA"},
+        {"Produto":"P3","MEA (%)":74,"MEA-P (%)":52,"Oficial (%)":45,
+         "Melhor na comparação":"Oficial"},
+    ])
+    st.dataframe(accuracy,hide_index=True,use_container_width=True)
+    st.caption("Tabela 4.2 do TCC. A MEA-P foi concebida depois de analisar "
+               "resultados iniciais; os resultados de P1 a P3 são exploratórios. "
+               "O Plano Oficial permaneceu a melhor previsão no P3.")
+
+    st.markdown("#### A diferença prática está no momento da decisão")
+    st.write("No estudo, a previsão por analogia identificou riscos que a regra do "
+             "plano oficial ainda não sinalizava. Nos dois episódios adicionais "
+             "fora da amostra, os primeiros alertas chegaram com seis e oito meses "
+             "de antecedência, antes do prazo teórico de fornecimento.")
+    d,e=st.columns(2)
+    d.metric("B_1 · redução potencial no pior mês","83%")
+    e.metric("C_2 · redução potencial no pior mês","46%")
+    st.caption("Exercícios contrafactuais: cortes hipotéticos sobre lotes que ainda "
+               "poderiam mudar, supondo vendas inalteradas. Não incluem contratos, "
+               "lotes mínimos nem restrições completas de fornecedores.")
+
+    st.markdown("#### O que impede uma promessa de economia?")
+    st.warning("Não foi demonstrada redução real de estoque atribuível ao Smart Launch. "
+               "No P1, os lotes ainda modificáveis foram posteriormente cancelados "
+               "pela própria L'Oréal. Não há dados suficientes para calcular economias "
+               "financeiras nem validação prospectiva de decisões executadas.")
+    st.write("**Confiabilidade:** o método sinalizou a tempo dois dos três episódios, "
+             "mas a precisão de alertas nos benchmarks foi de 48%. "
+             "O nível de alerta de 20% foi estabelecido após observar parte dos resultados. "
+             "Isso torna necessário recalibrar e validar a regra em novos lançamentos.")
+    st.caption("Os números aqui são evidências históricas do capítulo 4 do TCC. "
+               "O diagnóstico no painel de decisões é recalculado com o Excel carregado.")
+    st.button("Verificar alertas de um fechamento",
+              on_click=navigate,args=("Validação histórica dos alertas",chosen))
+
 elif page == "Validação histórica dos alertas":
-    st.title("Validação histórica dos alertas")
+    st.subheader("Alertas reconstruídos por fechamento")
     st.write("O que o Smart Launch previa em cada fechamento, o que foi registrado posteriormente e se o fornecedor ainda poderia receber uma alteração.")
     st.info(
         "Esta é uma **reconstrução retrospectiva** com as revisões do Triângulo, "
@@ -1208,8 +1270,22 @@ elif page == "Validação histórica dos alertas":
     )
 
 elif page == "Histórico e metodologia":
-    st.title("Histórico e metodologia")
+    st.subheader("Metodologia, parâmetros e auditoria")
     st.write("Parâmetros, rastreabilidade e limitações do Smart Launch.")
+    with st.expander("Auditoria dos dados enviados", expanded=False):
+        diagnostics=[]
+        for p,sheet in SHEETS.items():
+            b=blocks[sheet]
+            diagnostics.append({
+                "Produto":p,
+                "Revisões PV":len(b["PV"].index),
+                "Revisões PROD":len(b["PROD"].index),
+                "Revisões EST":len(b["EST"].index),
+                "Simulação":"Válida" if results[p] is not None else "Indisponível",
+                "Observação":errors.get(p,""),
+            })
+        st.dataframe(pd.DataFrame(diagnostics),hide_index=True,use_container_width=True)
+        st.caption("Dados comerciais processados na sessão, não publicados no repositório.")
     st.subheader("Registro desta sessão")
     st.caption("Fechamento "+label(close)+" · Arquivo "+file_name)
     approvals=st.session_state.get("approvals",[])
