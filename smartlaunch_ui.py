@@ -810,7 +810,7 @@ elif page == "Impacto operacional":
         show_available_forecast(product,close,blocks)
         st.stop()
 
-    st.subheader("1. Defina o mês e o lote que deseja avaliar")
+    st.markdown("**Escolha o mês-alvo e avalie apenas lotes que ainda podem ser alterados.**")
     active_months=[(i,m) for i,m in enumerate(res["months"]) if bool(res["active"][i])]
     if not active_months:
         st.warning("A janela crítica não contém meses avaliáveis.")
@@ -870,7 +870,7 @@ elif page == "Impacto operacional":
             index=0,key="impact_action"
         )
         selected=candidates[candidates["Alternativa"]==chosen_option].iloc[0]
-        st.subheader("2. Consequências da alteração")
+        st.subheader("Efeito da alternativa selecionada")
         row1=st.columns(4)
         excess_change=float(selected["Excesso potencialmente evitado (un.)"])
         lost_change=float(selected["Vendas perdidas adicionais (un.)"])
@@ -884,159 +884,183 @@ elif page == "Impacto operacional":
             "A mesma sacola de "+str(len(res["dm"]))+" trajetórias de demanda é reutilizada "
             "em todas as alternativas. A previsão e as probabilidades não são dados reais futuros."
         )
-        st.subheader("3. Fronteira excesso × serviço")
-        min_fill=st.slider(
-            "Meta mínima de fill rate para exploração (%)",
-            min_value=70,max_value=100,value=95,step=1,key="impact_min_fill"
-        )
-        st.caption(
-            "Meta ilustrativa ajustável, **não** é uma política aprovada pela L'Oréal. "
-            "O painel não escolhe nem executa automaticamente uma alternativa."
-        )
-        frame=candidates.copy()
-        frame["Cumpre meta hipotética"]=frame["Fill rate simulado (%)"]>=float(min_fill)
-        fig=go.Figure()
-        for _,row in frame.iterrows():
-            is_current=row["Alternativa"]=="Manter plano"
-            selected_here=row["Alternativa"]==chosen_option
-            fig.add_trace(go.Scatter(
-                x=[float(row["Excesso esperado no mês-alvo (un.)"])],
-                y=[float(row["Vendas perdidas esperadas na janela (un.)"])],
-                mode="markers+text",
-                text=[row["Alternativa"]] if selected_here or is_current else [""],
-                textposition="top center",
-                name=row["Alternativa"],
-                marker=dict(
-                    size=17 if selected_here else 11,
-                    color=("#111111" if is_current else
-                           "#167848" if row["Cumpre meta hipotética"] else "#be3322"),
-                    symbol="diamond" if selected_here else "circle",
-                    line=dict(width=1,color="#fff"),
-                ),
-                hovertemplate=(
-                    "<b>"+row["Alternativa"]+"</b><br>Excesso esperado: %{x:,.0f} un."
-                    "<br>Vendas perdidas: %{y:,.0f} un.<extra></extra>"
-                ),
-                showlegend=False,
-            ))
-        fig.update_layout(
-            template="plotly_white",height=380,
-            xaxis_title="Estoque excedente esperado no mês-alvo (un.)",
-            yaxis_title="Vendas perdidas esperadas na janela (un.)",
-            margin=dict(l=15,r=15,t=25,b=20),
-            paper_bgcolor="#ffffff",plot_bgcolor="#ffffff"
-        )
-        st.plotly_chart(fig,use_container_width=True)
-        st.caption("Pontos verdes cumprem a meta exploratória de fill rate; vermelhos, não. "
-                   "O losango destaca a alternativa selecionada. "
-                   "Uma alternativa não dominada apresenta uma troca potencial entre "
-                   "excesso e perdas; isso não significa custo mínimo ou decisão ótima.")
-        show=[
-            "Alternativa","Quantidade do lote (un.)",
-            "Excesso esperado no mês-alvo (un.)",
-            "Excesso potencialmente evitado (un.)",
-            "Vendas perdidas esperadas na janela (un.)",
-            "Vendas perdidas adicionais (un.)",
-            "Fill rate simulado (%)","Risco excesso no mês-alvo (%)",
-            "Risco ruptura no mês-alvo (%)",
-            "Não dominada (excesso × perda)","Cumpre meta hipotética"
-        ]
-        display=frame[show].copy()
-        int_cols=[
-            "Quantidade do lote (un.)","Excesso esperado no mês-alvo (un.)",
-            "Excesso potencialmente evitado (un.)",
-            "Vendas perdidas esperadas na janela (un.)",
-            "Vendas perdidas adicionais (un.)",
-        ]
-        for col in int_cols:
-            display[col]=display[col].round(0).astype(int)
-        st.dataframe(display,hide_index=True,use_container_width=True)
-        if not bool(selected["Não dominada (excesso × perda)"]):
-            st.info("A alternativa selecionada é dominada: existe outra com "
-                    "excesso esperado e vendas perdidas iguais ou menores.")
-        if float(selected["Fill rate simulado (%)"])<min_fill:
-            st.warning("A alternativa está abaixo da meta exploratória de fill rate. "
-                       "Não há justificativa para recomendá-la automaticamente.")
+        with st.expander("Detalhes da análise: fronteira entre excesso e vendas perdidas"):
+            min_fill=st.slider(
+                "Meta mínima de fill rate para exploração (%)",
+                min_value=70,max_value=100,value=95,step=1,key="impact_min_fill"
+            )
+            st.caption(
+                "Meta ilustrativa ajustável, **não** é uma política aprovada pela L'Oréal. "
+                "O painel não escolhe nem executa automaticamente uma alternativa."
+            )
+            frame=candidates.copy()
+            frame["Cumpre meta hipotética"]=frame["Fill rate simulado (%)"]>=float(min_fill)
+            fig=go.Figure()
+            for _,row in frame.iterrows():
+                is_current=row["Alternativa"]=="Manter plano"
+                selected_here=row["Alternativa"]==chosen_option
+                fig.add_trace(go.Scatter(
+                    x=[float(row["Excesso esperado no mês-alvo (un.)"])],
+                    y=[float(row["Vendas perdidas esperadas na janela (un.)"])],
+                    mode="markers+text",
+                    text=[row["Alternativa"]] if selected_here or is_current else [""],
+                    textposition="top center",
+                    name=row["Alternativa"],
+                    marker=dict(
+                        size=17 if selected_here else 11,
+                        color=("#111111" if is_current else
+                               "#167848" if row["Cumpre meta hipotética"] else "#be3322"),
+                        symbol="diamond" if selected_here else "circle",
+                        line=dict(width=1,color="#fff"),
+                    ),
+                    hovertemplate=(
+                        "<b>"+row["Alternativa"]+"</b><br>Excesso esperado: %{x:,.0f} un."
+                        "<br>Vendas perdidas: %{y:,.0f} un.<extra></extra>"
+                    ),
+                    showlegend=False,
+                ))
+            fig.update_layout(
+                template="plotly_white",height=380,
+                xaxis_title="Estoque excedente esperado no mês-alvo (un.)",
+                yaxis_title="Vendas perdidas esperadas na janela (un.)",
+                margin=dict(l=15,r=15,t=25,b=20),
+                paper_bgcolor="#ffffff",plot_bgcolor="#ffffff"
+            )
+            st.plotly_chart(fig,use_container_width=True)
+            st.caption("Pontos verdes cumprem a meta exploratória de fill rate; vermelhos, não. "
+                       "O losango destaca a alternativa selecionada. "
+                       "Uma alternativa não dominada apresenta uma troca potencial entre "
+                       "excesso e perdas; isso não significa custo mínimo ou decisão ótima.")
+            show=[
+                "Alternativa","Quantidade do lote (un.)",
+                "Excesso esperado no mês-alvo (un.)",
+                "Excesso potencialmente evitado (un.)",
+                "Vendas perdidas esperadas na janela (un.)",
+                "Vendas perdidas adicionais (un.)",
+                "Fill rate simulado (%)","Risco excesso no mês-alvo (%)",
+                "Risco ruptura no mês-alvo (%)",
+                "Não dominada (excesso × perda)","Cumpre meta hipotética"
+            ]
+            display=frame[show].copy()
+            int_cols=[
+                "Quantidade do lote (un.)","Excesso esperado no mês-alvo (un.)",
+                "Excesso potencialmente evitado (un.)",
+                "Vendas perdidas esperadas na janela (un.)",
+                "Vendas perdidas adicionais (un.)",
+            ]
+            for col in int_cols:
+                display[col]=display[col].round(0).astype(int)
+            st.dataframe(display,hide_index=True,use_container_width=True)
+            if not bool(selected["Não dominada (excesso × perda)"]):
+                st.info("A alternativa selecionada é dominada: existe outra com "
+                        "excesso esperado e vendas perdidas iguais ou menores.")
+            if float(selected["Fill rate simulado (%)"])<min_fill:
+                st.warning("A alternativa está abaixo da meta exploratória de fill rate. "
+                           "Não há justificativa para recomendá-la automaticamente.")
         st.download_button(
             "Exportar comparação (CSV)",
             frame.to_csv(index=False).encode("utf-8-sig"),
             file_name="impacto_"+product+"_"+label(close).replace("/","-")+".csv",
             mime="text/csv"
         )
+        resumo_decisao=pd.DataFrame([
+            {"Campo":"Fechamento", "Valor":label(close)},
+            {"Campo":"Produto", "Valor":product},
+            {"Campo":"Modelo operacional", "Valor":st.session_state["operational_"+product]},
+            {"Campo":"Mês-alvo do excesso", "Valor":label(res["months"][month_idx])},
+            {"Campo":"Lote avaliado", "Valor":label(lot["month"])},
+            {"Campo":"Prazo teórico", "Valor":label(lot["deadline"])},
+            {"Campo":"Alternativa selecionada", "Valor":chosen_option},
+            {"Campo":"Excesso esperado sem alteração (un.)",
+             "Valor":round(float(baseline["expected_excess_units"]))},
+            {"Campo":"Excesso potencialmente evitado (un.)",
+             "Valor":round(float(selected["Excesso potencialmente evitado (un.)"]))},
+            {"Campo":"Vendas perdidas adicionais (un.)",
+             "Valor":round(float(selected["Vendas perdidas adicionais (un.)"]))},
+            {"Campo":"Fill rate simulado (%)",
+             "Valor":round(float(selected["Fill rate simulado (%)"]),2)},
+            {"Campo":"Status", "Valor":"Cenário hipotético — não executado"},
+            {"Campo":"Pendências",
+             "Valor":"Validar capacidade, lotes mínimos, contratos, custos, serviço e prazo real"},
+        ])
         arquivo_excel = BytesIO()
         with pd.ExcelWriter(arquivo_excel, engine="openpyxl") as escritor:
-            frame.to_excel(escritor, sheet_name="Comparacao de lotes", index=False)
+            resumo_decisao.to_excel(escritor,sheet_name="Resumo para reuniao",index=False)
+            frame.to_excel(escritor, sheet_name="Todas alternativas", index=False)
         st.download_button(
-            "Exportar comparação (Excel)",
+            "Baixar análise para reunião (Excel)",
             arquivo_excel.getvalue(),
-            file_name="impacto_"+product+"_"+label(close).replace("/","-")+".xlsx",
+            file_name="decisao_"+product+"_"+label(close).replace("/","-")+".xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-    st.subheader("4. Valor adicional frente à referência atual")
-    st.write(
-        "O benefício operacional acima compara a **alternativa de lote** com o "
-        "**plano de produção sem alteração**, sob as mesmas trajetórias simuladas. "
-        "Não é uma comparação com uma política de compras oficial que não foi fornecida."
-    )
-    detail,rank,winner=rankings[product]
-    model=st.session_state["operational_"+product]
-    comparison=historical_mape_vs_official(detail,model)
-    if comparison is None:
-        st.info(
-            "Ainda não há previsões históricas comparáveis do modelo operacional "
-            "e da previsão Oficial, com os mesmos pares origem e mês-alvo."
+    st.caption("As alternativas são comparadas com o plano sem alteração usando "
+               "os mesmos cenários. Não existe escolha automática de lote ou custo ótimo.")
+    with st.expander("Comparação estatística e histórico da antecedência"):
+        st.subheader("4. Valor adicional frente à referência atual")
+        st.write(
+            "O benefício operacional acima compara a **alternativa de lote** com o "
+            "**plano de produção sem alteração**, sob as mesmas trajetórias simuladas. "
+            "Não é uma comparação com uma política de compras oficial que não foi fornecida."
         )
-    else:
-        k1,k2,k3=st.columns(3)
-        k1.metric("MAPE do modelo em uso",f'{comparison["mape_operacional"]:.1f}%')
-        k2.metric("MAPE da previsão Oficial",f'{comparison["mape_oficial"]:.1f}%')
-        k3.metric("Diferença (Oficial − modelo)",f'{comparison["delta_pp"]:+.1f} p.p.')
-        st.caption(str(comparison["pares"])+" previsões comparáveis nos mesmos pares "
-                   "origem/alvo. Comparação de previsão reduzida (4 modelos), "
-                   "não prova melhoria do estoque ou superioridade generalizável.")
-    st.subheader("5. Avisos que chegaram antes do lead time")
-    key=("impact_history",st.session_state["data_digest"],product,close,model)
-    if st.session_state.get("impact_history_key")!=key:
-        try:
-            _, historic_alerts,_=reconstruct_history(
-                product,close,blocks,base,model=model,max_origins=8,max_horizon=9,
-                method=DEFAULT_METHOD,persistent=False
+        detail,rank,winner=rankings[product]
+        model=st.session_state["operational_"+product]
+        comparison=historical_mape_vs_official(detail,model)
+        if comparison is None:
+            st.info(
+                "Ainda não há previsões históricas comparáveis do modelo operacional "
+                "e da previsão Oficial, com os mesmos pares origem e mês-alvo."
             )
-            first=first_alerts(historic_alerts)
-            st.session_state["impact_history_count"]=(
-                len(first),
-                int(first["Emitido em tempo pelo LT"].sum()) if not first.empty else 0
-            )
-            st.session_state["impact_history_error"]=None
-        except (ValueError,KeyError,IndexError,TypeError) as exc:
-            st.session_state["impact_history_count"]=(0,0)
-            st.session_state["impact_history_error"]=str(exc)
-        st.session_state["impact_history_key"]=key
-    total,timely=st.session_state["impact_history_count"]
-    if total:
-        tm1,tm2=st.columns(2)
-        tm1.metric("Alertas únicos reconstruídos",total)
-        tm2.metric("Em tempo pelo lead time",f"{timely}/{total} · {timely/total*100:.1f}%")
-    else:
-        st.info("Não há alertas históricos verificáveis para calcular a taxa de "
-                "antecedência com a metodologia e os fechamentos selecionados.")
-    if st.session_state.get("impact_history_error"):
-        st.caption("Diagnóstico da reconstrução: "+
-                   st.session_state["impact_history_error"])
-    st.caption(
-        "A primeira emissão de cada tipo de alerta por mês-alvo é contada uma vez. "
-        "O prazo é apenas teórico, e esta é uma reconstrução retrospectiva com "
-        "modelo fixo — não um registro permanente do que a L'Oréal decidiu."
-    )
-    st.button("Abrir validação histórica completa",
-              on_click=navigate,args=("Validação histórica dos alertas",product))
-    st.warning(
-        "Não existe evidência de redução real de estoque, economia financeira ou "
-        "ganho de serviço sem execução/validação operacional. "
-        "Ajustar produção exige confirmação do fornecedor, capacidade, custos, "
-        "restrições contratuais e política de serviço da L'Oréal."
-    )
+        else:
+            k1,k2,k3=st.columns(3)
+            k1.metric("MAPE do modelo em uso",f'{comparison["mape_operacional"]:.1f}%')
+            k2.metric("MAPE da previsão Oficial",f'{comparison["mape_oficial"]:.1f}%')
+            k3.metric("Diferença (Oficial − modelo)",f'{comparison["delta_pp"]:+.1f} p.p.')
+            st.caption(str(comparison["pares"])+" previsões comparáveis nos mesmos pares "
+                       "origem/alvo. Comparação de previsão reduzida (4 modelos), "
+                       "não prova melhoria do estoque ou superioridade generalizável.")
+        st.subheader("5. Avisos que chegaram antes do lead time")
+        key=("impact_history",st.session_state["data_digest"],product,close,model)
+        if st.session_state.get("impact_history_key")!=key:
+            try:
+                _, historic_alerts,_=reconstruct_history(
+                    product,close,blocks,base,model=model,max_origins=8,max_horizon=9,
+                    method=DEFAULT_METHOD,persistent=False
+                )
+                first=first_alerts(historic_alerts)
+                st.session_state["impact_history_count"]=(
+                    len(first),
+                    int(first["Emitido em tempo pelo LT"].sum()) if not first.empty else 0
+                )
+                st.session_state["impact_history_error"]=None
+            except (ValueError,KeyError,IndexError,TypeError) as exc:
+                st.session_state["impact_history_count"]=(0,0)
+                st.session_state["impact_history_error"]=str(exc)
+            st.session_state["impact_history_key"]=key
+        total,timely=st.session_state["impact_history_count"]
+        if total:
+            tm1,tm2=st.columns(2)
+            tm1.metric("Alertas únicos reconstruídos",total)
+            tm2.metric("Em tempo pelo lead time",f"{timely}/{total} · {timely/total*100:.1f}%")
+        else:
+            st.info("Não há alertas históricos verificáveis para calcular a taxa de "
+                    "antecedência com a metodologia e os fechamentos selecionados.")
+        if st.session_state.get("impact_history_error"):
+            st.caption("Diagnóstico da reconstrução: "+
+                       st.session_state["impact_history_error"])
+        st.caption(
+            "A primeira emissão de cada tipo de alerta por mês-alvo é contada uma vez. "
+            "O prazo é apenas teórico, e esta é uma reconstrução retrospectiva com "
+            "modelo fixo — não um registro permanente do que a L'Oréal decidiu."
+        )
+        st.button("Abrir validação histórica completa",
+                  on_click=navigate,args=("Validação histórica dos alertas",product))
+        st.warning(
+            "Não existe evidência de redução real de estoque, economia financeira ou "
+            "ganho de serviço sem execução/validação operacional. "
+            "Ajustar produção exige confirmação do fornecedor, capacidade, custos, "
+            "restrições contratuais e política de serviço da L'Oréal."
+        )
 
 
 elif page == "Valor demonstrado":
