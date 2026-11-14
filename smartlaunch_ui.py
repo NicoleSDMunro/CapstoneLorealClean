@@ -15,7 +15,8 @@ from smartlaunch_core import (
 )
 from smartlaunch_monthly import evaluate_models
 from smartlaunch_priority import card_summary
-from smartlaunch_metrics import current_alert_opportunities, compare_verified_excess
+from smartlaunch_metrics import (current_alert_opportunities, compare_verified_excess,
+                                 format_opportunity_months)
 from smartlaunch_supply import future_lots, supply_diagnosis
 from smartlaunch_impact import (editable_lots, outcome_metrics, evaluate_lot_options,
                                 historical_mape_vs_official)
@@ -533,10 +534,7 @@ if page == "Visão geral":
             f'{opportunities["boundary"]} no mês-limite (data de corte a confirmar).'
         )
         with st.expander("Quais alertas têm oportunidade pelo lead time?"):
-            opportunity_view = pd.DataFrame(opportunities["rows"]).copy()
-            opportunity_view["Mês-alvo"] = opportunity_view["Mês-alvo"].map(label)
-            opportunity_view["Mês-limite"] = opportunity_view["Mês-limite"].map(
-                lambda month: label(month) if month is not None else "—")
+            opportunity_view = format_opportunity_months(pd.DataFrame(opportunities["rows"]))
             st.dataframe(opportunity_view[
                 ["Produto","Mês-alvo","Tipo de risco","Probabilidade (%)",
                  "Situação do prazo","Mês-limite"]
@@ -618,10 +616,7 @@ if page == "Visão geral":
     with pd.ExcelWriter(priorities_file,engine="openpyxl") as writer:
         pd.DataFrame(decisions).to_excel(writer,sheet_name="Prioridades",index=False)
         if opportunities["rows"]:
-            detail_op = pd.DataFrame(opportunities["rows"]).copy()
-            detail_op["Mês-alvo"] = detail_op["Mês-alvo"].map(label)
-            detail_op["Mês-limite"] = detail_op["Mês-limite"].map(
-                lambda month: label(month) if month is not None else "—")
+            detail_op = format_opportunity_months(pd.DataFrame(opportunities["rows"]))
             detail_op.to_excel(writer,sheet_name="Prazo dos alertas",index=False)
     st.download_button("Baixar resumo do fechamento (Excel)",
         priorities_file.getvalue(),
