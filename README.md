@@ -1,3 +1,15 @@
+# Correção do diagnóstico de lotes e lead time — 14/11/2026
+
+A interface distingue **(1) ausência de lote positivo futuro no Triângulo**, **(2) lote positivo com prazo teórico vencido**, **(3) lote no próprio mês-limite sujeito à data diária de corte** e **(4) lote com prazo teórico futuro**. Em todos os casos, a aprovação é humana. A ferramenta nunca afirma que a empresa não pode negociar pedidos externos ao arquivo.
+
+**Exemplo metodológico:** se o fechamento é julho e o lead time é de quatro meses, uma entrega de novembro tem mês-limite em julho (incerteza da data de corte). Uma entrega de dezembro tem mês-limite em agosto. Lotes existentes nesses meses são apresentados como cenários possíveis de avaliação, não como cancelamentos automaticamente executáveis. Um lote que chega após o primeiro excesso não elimina o estoque que já estava acumulado naquele mês; pode afetar períodos posteriores.
+
+**No P1**, quando não há produção futura positiva no Triângulo, o painel deve explicar que a simulação de excesso está relacionada ao estoque existente e às vendas futuras; orienta análise comercial e confirmação de compromissos não presentes no arquivo. Exibe uma tabela com os meses futuros, inclusive quantidades zeradas, no simulador e no impacto.
+
+Os cálculos de previsão, probabilidade e balanço de estoque não foram modificados. A elegibilidade por mês foi ajustada para **prazo >= fechamento**, com aviso obrigatório para casos de igualdade. Testes de regressão: `PYTHONPATH=. python tests/test_supply.py` e `PYTHONPATH=. python tests/test_impact.py`.
+
+---
+
 # Smart Launch — experiência para consultores da L'Oréal (14/11/2026)
 
 **Objetivo da interface:** em cada fechamento, permitir que o planejador responda: qual SKU apresenta risco, em que mês, se ainda existe prazo operacional e qual alternativa mitiga excesso sem provocar ruptura.
