@@ -15,7 +15,8 @@ at.run()
 assert not at.exception, [str(e) for e in at.exception]
 assert any("Central de decisões" in str(t.value) for t in at.title)
 
-at.radio[0].set_value("Análise do produto").run()
+nav = next(r for r in at.radio if r.label == "Navegação")
+nav.set_value("Análise do produto").run()
 assert not at.exception, [str(e) for e in at.exception]
 assert any("Decisão de abastecimento" in str(t.value) for t in at.title)
 
@@ -24,7 +25,8 @@ assert len(views) == 1, "Subnavegação de produto não encontrada"
 views[0].set_value("Riscos por mês").run()
 assert not at.exception, [str(e) for e in at.exception]
 
-at.radio[0].set_value("Resultados e confiabilidade").run()
+nav = next(r for r in at.radio if r.label == "Navegação")
+nav.set_value("Resultados e confiabilidade").run()
 assert not at.exception, [str(e) for e in at.exception]
 assert any("Resultados e confiabilidade" in str(t.value) for t in at.title)
 
