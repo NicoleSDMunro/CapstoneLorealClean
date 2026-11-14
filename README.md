@@ -1,3 +1,15 @@
+# Métricas de antecedência e comparação com o Oficial — 14/11/2026
+
+**Central de decisões:** o quarto indicador passou a ser **Alertas com oportunidade pelo LT** (N de M). O denominador é cada combinação produto × mês-alvo × tipo de risco (excesso ou ruptura), apenas na janela crítica de simulações válidas do fechamento selecionado. O numerador exige lote futuro positivo que chegue até o risco e prazo **posterior ao fechamento**, ou **no mês-limite** (sempre a confirmar). O detalhamento separa quantos são estritamente futuros e quantos estão no mês-limite. Não chama ausência de simulação de risco zero. A exportação Excel inclui aba `Prazo dos alertas` com ocorrências individuais.
+
+**Resultados e confiabilidade:** preserva os números retrospectivos do TCC como bloco fixo, **sem misturá-los com o upload**. Acrescenta comparação **sob demanda e por produto** usando o Triângulo enviado: reconstrói até oito origens idênticas com a previsão operacional atual e com a previsão Oficial, usando o mesmo motor de simulação, limite de 2,5%, janela crítica e horizonte (9 meses). Considera somente meses-alvo com **excesso verificável por estoque registrado e vendas futuras disponíveis**; apresenta primeiro fechamento em alerta, antecedência em meses, condição pelo lead time e qual modelo sinalizou primeiro. Se não houver eventos verificáveis, retorna **sem evidência suficiente**, não zero. O fluxo operacional completo da L'Oréal **não é reconstruído**: a referência é a previsão Oficial combinada à regra de risco Smart Launch.
+
+A validação de prazos históricos foi alinhada ao tratamento da competência **igual ao mês-limite**, classificada como oportunidade **dependente de confirmação da data de corte**, jamais como negociação autorizada. Essa métrica reflete oportunidades temporais teóricas, não taxa de decisões executadas ou resultado monetário.
+
+Testes: `PYTHONPATH=. python tests/test_metrics.py`; `PYTHONPATH=. python tests/test_historical_validation.py`; `PYTHONPATH=. python tests/test_ui.py`. Nenhum dado real está versionado no repositório.
+
+---
+
 # Correção do diagnóstico de lotes e lead time — 14/11/2026
 
 A interface distingue **(1) ausência de lote positivo futuro no Triângulo**, **(2) lote positivo com prazo teórico vencido**, **(3) lote no próprio mês-limite sujeito à data diária de corte** e **(4) lote com prazo teórico futuro**. Em todos os casos, a aprovação é humana. A ferramenta nunca afirma que a empresa não pode negociar pedidos externos ao arquivo.
