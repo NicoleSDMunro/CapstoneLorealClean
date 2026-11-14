@@ -1,6 +1,7 @@
 """Smart Launch — central de alertas mensal, sem números ilustrativos."""
 import hashlib
 import html
+from io import BytesIO
 from datetime import datetime, timezone
 
 import numpy as np
@@ -893,6 +894,15 @@ elif page == "Impacto operacional":
             file_name="impacto_"+product+"_"+label(close).replace("/","-")+".csv",
             mime="text/csv"
         )
+        arquivo_excel = BytesIO()
+        with pd.ExcelWriter(arquivo_excel, engine="openpyxl") as escritor:
+            frame.to_excel(escritor, sheet_name="Comparacao de lotes", index=False)
+        st.download_button(
+            "Exportar comparação (Excel)",
+            arquivo_excel.getvalue(),
+            file_name="impacto_"+product+"_"+label(close).replace("/","-")+".xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     st.subheader("4. Valor adicional frente à referência atual")
     st.write(
@@ -1171,4 +1181,15 @@ versão reduzida experimental e precisa de homologação.
         st.download_button("Exportar riscos do fechamento (CSV)",data_csv,
                            file_name="smartlaunch_"+label(close).replace("/","-")+".csv",
                            mime="text/csv")
+        arquivo_excel = BytesIO()
+        with pd.ExcelWriter(arquivo_excel, engine="openpyxl") as escritor:
+            pd.concat(export, ignore_index=True).to_excel(
+                escritor, sheet_name="Riscos do fechamento", index=False
+            )
+        st.download_button(
+            "Exportar riscos do fechamento (Excel)",
+            arquivo_excel.getvalue(),
+            file_name="smartlaunch_"+label(close).replace("/","-")+".xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
     st.caption("Dados confidenciais não são publicados no GitHub. Implantação empresarial requer autenticação, armazenamento privado, homologação dos cálculos e política de retenção.")
