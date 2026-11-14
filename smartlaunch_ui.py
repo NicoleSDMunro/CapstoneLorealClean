@@ -433,149 +433,142 @@ else:
     page = "Visão geral"
 
 if page == "Visão geral":
-    st.title("Central de Alertas")
-    st.write("O que merece atenção neste fechamento — e se ainda dá tempo de agir.")
-    st.caption("Os números abaixo são calculados a partir do Excel enviado, não de uma base demonstrativa.")
-    counts = {"ex":0,"ru":0,"open":0}
-    priorities=[]
+    st.title("Central de decisões")
+    st.write("Quais lançamentos merecem atenção neste fechamento — e qual é o próximo passo?")
+    st.caption("Leitura do Triângulo enviado · Fechamento " + label(close) +
+               " · Indicadores simulados, não resultados financeiros ou decisões executadas.")
+
+    snapshots = []
+    alert_excess = 0
+    alert_shortage = 0
+    supplier_actions = 0
     for product,res in results.items():
         if res is None:
+            snapshots.append({"product":product,"valid":False,
+                              "error":errors.get(product,"Dados insuficientes")})
             continue
-        frame=rows_from_sim(res)
-        counts["ex"]+=bool(frame["Alerta excesso"].any())
-        counts["ru"]+=bool(frame["Alerta ruptura"].any())
-        counts["open"]+=sum(lot["alterável"] for lot in eligible_lots(res,close))
-        threats=frame[frame["Alerta excesso"]|frame["Alerta ruptura"]]
-        if not threats.empty:
-            row=threats.iloc[0]
-            typ = "excesso" if row["Alerta excesso"] else "ruptura"
-            prob = row["Excesso (%)"] if typ=="excesso" else row["Ruptura (%)"]
-            act,desc=classify_action(res,close,row["Período"],typ)
-            priorities.append((0,row["Período"],product,typ,prob,row,act,desc))
-        else:
-            priorities.append((1,pd.Period("2099-01","M"),product,None,0,None,"Monitoramento","Sem gatilho na janela crítica."))
-    mc=st.columns(5)
-    for col,title,value in zip(mc,
-        ["Produtos monitorados","Risco de excesso","Risco de ruptura","Lotes com prazo aberto","Sem simulação válida"],
-        [len(MODEL),
-         f'{counts["ex"]}/{ready_count}' if ready_count else "—",
-         f'{counts["ru"]}/{ready_count}' if ready_count else "—",
-         counts["open"] if ready_count else "—",
-         len(MODEL)-ready_count]):
-        col.metric(title,value)
-    if ready_count<len(MODEL):
-        st.caption("Excesso e ruptura: ocorrências apenas entre os produtos com "
-                   "simulação válida (numerador / avaliados). O traço indica "
-                   "não calculado, não ausência de risco.")
-    st.subheader("Prioridades do fechamento")
-    st.caption("Risco e probabilidade vêm da mesma simulação apresentada nos gráficos. "
-               "Prazos de fornecedores são calculados por competência mensal e são teóricos.")
-    summaries = []
-    for product,res in results.items():
-        if res is not None:
-            summaries.append((product, card_summary(product, res, close)))
-    summaries.sort(key=lambda x: (
-        0 if x[1]["alert"] else 1,
-        x[1].get("first_month", pd.Period("2099-01",freq="M")),
-        x[0]
-    ))
-    for product, summary in summaries:
+        summary = card_summary(product,res,close)
+        frame = rows_from_sim(res)
+        active = frame[frame["Janela crítica"]]
+        exrow = (active.loc[active["Excesso (%)"].idxmax()]
+                 if not active.empty else None)
+        rurow = (active.loc[active["Ruptura (%)"].idxmax()]
+                 if not active.empty else None)
+        ex = float(exrow["Excesso (%)"]) if exrow is not None else 0.0
+        ru = float(rurow["Ruptura (%)"]) if rurow is not None else 0.0
+        alert_excess += ex > 100*LIMIT_ALERT
+        alert_shortage += ru > 100*LIMIT_ALERT
+        if summary["alert"] and summary["first_target_has_changeable_lot"]:
+            supplier_actions += 1
+        snapshots.append({
+            "product":product, "valid":True, "summary":summary,
+            "ex":ex, "ru":ru, "exmonth":str(exrow["Mês"]) if exrow is not None else "—",
+            "rumonth":str(rurow["Mês"]) if rurow is not None else "—",
+            "priority": (0 if summary["alert"] and
+                         summary["first_target_has_changeable_lot"] else
+                         1 if ex > 100*LIMIT_ALERT else
+                         2 if ru > 100*LIMIT_ALERT else 3),
+        })
+    snapshots.sort(key=lambda x:(x.get("priority",4),x["product"]))
+
+    metric_cols=st.columns(4)
+    metric_cols[0].metric("Produtos analisados",f"{ready_count}/{len(MODEL)}")
+    metric_cols[1].metric("Com sinal de excesso",f"{alert_excess}/{ready_count}" if ready_count else "—")
+    metric_cols[2].metric("Com sinal de ruptura",f"{alert_shortage}/{ready_count}" if ready_count else "—")
+    metric_cols[3].metric("Com prazo teórico de ação",supplier_actions if ready_count else "—")
+    st.caption("Sinal = evento acima de 2,5% nos cenários da janela crítica. "
+               "Prazo teórico não confirma renegociação contratual; "
+               "ausência de simulação não é ausência de risco.")
+
+    st.subheader("Prioridades para o planejamento")
+    for item in snapshots:
+        product=item["product"]
         with st.container(border=True):
-            heading, action_button = st.columns([4.3,1],vertical_alignment="center")
+            heading,go_button=st.columns([3.5,1.4],vertical_alignment="center")
             with heading:
                 st.markdown("### Produto " + product)
-                if summary["alert"]:
-                    risk_color = "pill-red" if summary["type"]=="Excesso" else "pill-amber"
-                    urgency_color = ("pill-green" if summary["first_target_has_changeable_lot"]
-                                     else "pill-amber")
-                    st.markdown(
-                        '<span class="pill '+risk_color+'">Risco: '+summary["type"]+'</span>'
-                        '<span class="pill '+urgency_color+'">Urgência: '+
-                        html.escape(summary["urgency"])+'</span>'
-                        '<span class="pill pill-green">Ação: '+html.escape(summary["action"])+'</span>',
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown('<span class="pill pill-green">Sem alertas na janela crítica</span>',
-                                unsafe_allow_html=True)
-            with action_button:
-                st.button("Analisar produto", key="open_"+product, type="primary",
+            with go_button:
+                st.button("Analisar decisões",key="ux_open_"+product, type="primary",
                           use_container_width=True,
-                          on_click=navigate,args=("Riscos de estoque",product))
+                          on_click=navigate,args=("Impacto operacional",product))
+            if not item["valid"]:
+                st.warning("Risco não calculado — " + item["error"])
+                st.caption("A previsão pontual pode estar disponível, mas não há resíduos "
+                           "suficientes para quantificar a probabilidade.")
+                continue
+            summary=item["summary"]
+            ex=item["ex"]
+            ru=item["ru"]
+            k1,k2,k3=st.columns([1,1,1.5])
+            k1.metric("Excesso · " + item["exmonth"],f"{ex:.1f}%".replace(".",","))
+            k2.metric("Ruptura · " + item["rumonth"],f"{ru:.1f}%".replace(".",","))
+            with k3:
+                st.markdown("**Encaminhamento**")
+                st.write(summary["action"] if summary["alert"] else "Monitoramento")
+                if summary["alert"]:
+                    st.caption(summary["urgency"] +
+                               (" · " + label(summary["deadline"])
+                                if summary["deadline"] is not None else ""))
             if summary["alert"]:
-                risk_col, deadline_col = st.columns(2,gap="medium")
-                first_month=label(summary["first_month"])
-                peak_month=label(summary["peak_month"])
-                category=summary["type"]
-                problem = ("Existe probabilidade de estoque com cobertura acima de 180 dias."
-                           if category=="Excesso" else
-                           "Existe probabilidade de demanda não atendida por falta de estoque.")
-                risk_html=(
-                    '<div class="decision-panel">'
-                    '<div class="decision-eyebrow">O que está acontecendo</div>'
-                    '<div class="decision-description">'+problem+'</div>'
-                    '<div class="decision-number">'+f'{summary["peak_probability"]*100:.1f}%'.replace(".",",")+'</div>'
-                    '<div class="decision-line">Pico em <b>'+peak_month+'</b></div>'
-                    '<div class="decision-line">Primeiro mês em alerta: <b>'+first_month+'</b></div>'
-                    '<div class="decision-line">Cobertura mediana no pico: <b>'+
-                    f'{summary["coverage_peak_days"]:.0f} dias'+'</b></div>'
-                    '</div>'
-                )
-                deadline = (label(summary["deadline"])
-                            if summary["deadline"] is not None else "Não disponível")
-                remaining=summary.get("time_left_months")
-                remaining_text=(
-                    'Restam '+str(remaining)+' competência(s) mensais após o fechamento.'
-                    if remaining is not None else
-                    'Não há oportunidade identificada de alterar um lote a tempo.'
-                )
-                deadline_html=(
-                    '<div class="decision-panel">'
-                    '<div class="decision-eyebrow">Até quando agir</div>'
-                    '<div class="decision-description">'+html.escape(summary["deadline_label"])+'</div>'
-                    '<div class="decision-deadline">'+html.escape(deadline)+'</div>'
-                    '<div class="decision-line">'+html.escape(summary["urgency"])+'</div>'
-                    '<div class="decision-line">'+html.escape(remaining_text)+'</div>'
-                    '<div class="decision-line">Lead time usado: <b>'+
-                    str(summary["lead_time_months"])+' meses (arredondado)</b></div>'
-                    '<div class="decision-footnote">Sem data exata do fornecedor na base. '
-                    'Prazo em mês; confirmar calendário e restrições.</div>'
-                    '</div>'
-                )
-                with risk_col:
-                    st.markdown(risk_html,unsafe_allow_html=True)
-                with deadline_col:
-                    st.markdown(deadline_html,unsafe_allow_html=True)
-                st.markdown(
-                    '<div class="decision-action">'
-                    '<div class="decision-eyebrow">O que pode fazer</div>'
-                    '<div style="font-weight:720;margin-bottom:5px">'+
-                    html.escape(summary["action"])+'</div>'
-                    '<div class="decision-description">'+html.escape(summary["suggested"])+'</div>'
-                    '<div class="decision-footnote">'+html.escape(summary["qualification"])+'</div>'
-                    '</div>',unsafe_allow_html=True
-                )
+                st.markdown("**O que fazer agora:** " + summary["suggested"])
+                if ex > 100*LIMIT_ALERT and ru > 100*LIMIT_ALERT:
+                    st.caption("Há sinais de excesso e ruptura em cenários ou meses diferentes. "
+                               "Uma redução de lote exige conferir o efeito sobre vendas perdidas.")
+                st.caption("Primeiro risco observado pelo modelo: " + summary["type"].lower() +
+                           " em " + label(summary["first_month"]) +
+                           ". Os números não substituem análise de fornecedor/comercial.")
             else:
-                st.caption(summary["message"])
-            model_in_use=st.session_state["operational_"+product]
-            tested_winner=rankings[product][2] or "Não elegível"
-            st.caption(
-                "Modelo em uso: **"+model_in_use+"**  ·  "
-                "Melhor no teste reduzido (4 modelos): **"+tested_winner+"**  ·  "
-                "Reavaliado com dados do fechamento **"+label(close)+"**"
-            )
-    missing=[p for p in MODEL if results[p] is None]
-    if missing:
-        st.info("Sem avaliação probabilística: " + ", ".join(missing) +
-                ". Previsões centrais eventualmente disponíveis aparecem abaixo.")
-        st.subheader("Previsões disponíveis sem simulação de risco")
-        for product in missing:
-            with st.expander("Produto " + product + " — " + errors.get(product, "Sem simulação")):
-                show_available_forecast(product, close, blocks)
-    st.subheader("Linha do tempo dos alertas")
-    st.caption("E = excesso · R = ruptura · P = prazo ainda aberto de lote. São exibidos apenas alertas dentro da janela crítica.")
-    with st.container(border=True):
+                st.caption("Não há gatilho dentro da janela crítica. "
+                           "Reavaliar no próximo fechamento.")
+            st.caption("Modelo operacional: " + st.session_state["operational_"+product])
+
+    if ready_count < len(MODEL):
+        st.info("Produtos sem simulação válida: " +
+                ", ".join(item["product"] for item in snapshots if not item["valid"]) +
+                ". Não atribuímos chance zero a esses produtos.")
+
+    st.subheader("Levar prioridades para a reunião")
+    decisions=[]
+    for item in snapshots:
+        summary=item.get("summary",{})
+        decisions.append({
+            "Fechamento":label(close),
+            "Produto":item["product"],
+            "Status":"Simulação válida" if item["valid"] else "Dados insuficientes",
+            "Modelo em uso":st.session_state["operational_"+item["product"]],
+            "Maior chance de excesso (%)":round(item["ex"],1) if item["valid"] else None,
+            "Mês do pico de excesso":item.get("exmonth"),
+            "Maior chance de ruptura (%)":round(item["ru"],1) if item["valid"] else None,
+            "Mês do pico de ruptura":item.get("rumonth"),
+            "Encaminhamento":summary.get("action","Aguardar validação dos dados"),
+            "Primeiro mês de sinal":label(summary["first_month"]) if summary.get("alert") else None,
+            "Prazo teórico do lote":label(summary["deadline"]) if summary.get("deadline") is not None else None,
+            "Restrição":"Validar contratos, lotes mínimos e lead time; não executar automaticamente",
+        })
+    priorities_file=BytesIO()
+    with pd.ExcelWriter(priorities_file,engine="openpyxl") as writer:
+        pd.DataFrame(decisions).to_excel(writer,sheet_name="Prioridades",index=False)
+    st.download_button("Baixar resumo do fechamento (Excel)",
+        priorities_file.getvalue(),
+        file_name="smartlaunch_prioridades_"+label(close).replace("/","-")+".xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    with st.expander("Ver linha do tempo dos sinais por produto"):
+        st.caption("E = excesso · R = ruptura · P = prazo teórico aberto. "
+                   "Sinais apenas na janela crítica.")
         st.markdown(timeline_markup(results,close),unsafe_allow_html=True)
+
+    st.divider()
+    st.markdown("#### Por que complementar o planejamento oficial?")
+    st.write("A previsão por analogia oferece uma segunda leitura da demanda. "
+             "A simulação mostra quanto uma intervenção pode reduzir o excesso "
+             "e que novas perdas de venda ela pode criar.")
+    st.caption("Na avaliação retrospectiva do TCC, dois de três episódios de excesso "
+               "foram sinalizados antes do lead time pelo Smart Launch, contra nenhum "
+               "pela regra do plano oficial. A precisão dos alertas fora da amostra "
+               "foi de 48%; não houve redução real de estoque comprovada.")
+    st.button("Consultar resultados e limites do estudo",
+              on_click=navigate,args=("Valor demonstrado",))
 
 elif page == "Atualização mensal":
     st.subheader("Auditoria da base enviada")
