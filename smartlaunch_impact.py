@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from smartlaunch_core import balance, LIM
+from smartlaunch_supply import future_lots
 
 OPTIONS = (
     ("Manter plano", 1.0),
@@ -22,18 +23,17 @@ OPTIONS = (
 
 
 def editable_lots(res, close):
-    """Somente lotes positivos cujo mês limite (lead time) ainda não passou."""
+    """Lotes futuros com prazo à frente ou no próprio mês-limite.
+
+    No mês-limite a comparação é somente exploratória; não garante execução.
+    """
     return [
         {
-            "index": i,
-            "month": month,
-            "deadline": month - int(res["ltm"]),
-            "units": float(res["production"][i]),
+            "index": lot["index"], "month": lot["month"],
+            "deadline": lot["deadline"], "units": lot["units"],
+            "boundary": lot["boundary"], "situation": lot["situation"],
         }
-        for i,month in enumerate(res["months"])
-        if np.isfinite(res["production"][i])
-        and float(res["production"][i]) > 0
-        and month - int(res["ltm"]) > close
+        for lot in future_lots(res, close) if lot["available_for_analysis"]
     ]
 
 

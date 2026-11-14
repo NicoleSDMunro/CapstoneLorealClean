@@ -21,5 +21,7 @@ jobs:
         run: PYTHONPATH=. python tests/test_smoke.py
       - name: Test operational impact
         run: PYTHONPATH=. python tests/test_impact.py
+      - name: Test supplier deadlines and missing lots
+        run: PYTHONPATH=. python tests/test_supply.py
       - name: Test consultant UX
         run: PYTHONPATH=. python tests/test_ui.py
