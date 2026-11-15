@@ -72,3 +72,27 @@ assert c["pares"]==2 and c["mape_operacional"]==12.5
 assert c["mape_oficial"]==22.5 and c["delta_pp"]==10
 assert historical_mape_vs_official(d,"Naive") is None
 print("IMPACT METRICS PASS")
+
+# Critério do TCC: cortes em passos de 5% não devem criar sinal novo
+# nem elevar probabilidade mensal de ruptura em mais de 2,5 p.p.
+from smartlaunch_impact import tcc_lot_limits, tcc_check
+res_cut={
+    "months":months,"dm":dm,
+    "active":np.array([True]*8+[False]),
+    "e0":0.,
+    "production":np.array([80.,0.,0.,0.,0.,0.,0.,0.,0.]),
+    "ltm":1,"window":8,
+}
+limits=tcc_lot_limits(res_cut,0)
+assert limits["max_cut_pct"]==0,limits   # 5% cria ruptura no cenário de demanda 80
+res_cut["production"][0]=1000.
+limits=tcc_lot_limits(res_cut,0)
+assert 0<limits["max_cut_pct"]<100,limits
+plan=res_cut["production"].copy()
+plan[0]=0.
+assert tcc_check(res_cut,plan)["new_rupture"]
+options,_=evaluate_lot_options(res_cut,0,0)
+assert "Dentro do critério do TCC" in options.columns
+assert options.loc[options["Alternativa"]=="Cancelar lote",
+                   "Dentro do critério do TCC"].iloc[0]==False
+print("TCC CUT RULE PASS",limits)

@@ -5,8 +5,9 @@ a data exata e a autorização de alteração dependem do sistema do fornecedor.
 """
 import numpy as np
 from smartlaunch_supply import future_lots, supply_diagnosis
+from smartlaunch_core import AVISO, ALERTA
 
-THRESHOLD = 0.025
+THRESHOLD = ALERTA
 
 
 def card_summary(product, res, close, threshold=THRESHOLD):
@@ -21,6 +22,8 @@ def card_summary(product, res, close, threshold=THRESHOLD):
     all_lots = supply["lots"]
     window = np.asarray(res["active"], dtype=bool)
     ex = np.mean(np.asarray(res["cov"]) >= 180, axis=0)
+    evaluated = np.asarray(res.get("evaluated", np.ones(len(months), bool)), dtype=bool)
+    ex = np.where(evaluated, ex, 0.0)
     ru = np.mean(np.asarray(res["lost"]) > 0, axis=0)
     events = []
     for j, month in enumerate(months):
@@ -30,11 +33,22 @@ def card_summary(product, res, close, threshold=THRESHOLD):
             if float(probability) > threshold:
                 events.append((j, month, name, float(probability)))
     if not events:
+        warnings = [(j, month, name, float(probability))
+                    for j, month in enumerate(months) if window[j]
+                    for name, probability in (("Excesso", ex[j]), ("Ruptura", ru[j]))
+                    if AVISO < float(probability) <= threshold]
+        first_warning = min(warnings, key=lambda x:(x[0],-x[3])) if warnings else None
         return {
             "product": product, "alert": False,
+            "warning": bool(warnings),
+            "warning_type": first_warning[2] if first_warning else None,
+            "warning_month": first_warning[1] if first_warning else None,
+            "warning_probability": first_warning[3] if first_warning else None,
             "model_scope": "Apenas janela crítica",
-            "action": "Monitoramento",
-            "message": "Sem gatilhos probabilísticos no período avaliado.",
+            "action": "Acompanhar (aviso)" if warnings else "Monitoramento",
+            "message": ("Aviso acima de 2,5%, mas nenhum alerta acima de 20%: "
+                        "acompanhar no próximo fechamento, sem propor ação no fornecedor."
+                        if warnings else "Sem gatilhos probabilísticos no período avaliado."),
             "supply_note": supply["guidance"],
             "future_lot_count": len(all_lots),
             "first_target_has_changeable_lot": False,

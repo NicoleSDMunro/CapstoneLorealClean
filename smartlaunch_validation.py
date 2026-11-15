@@ -8,9 +8,9 @@ import math
 import numpy as np
 import pandas as pd
 
-from smartlaunch_core import MODEL, SHEETS, LIM, known, label, forecast, simulate
+from smartlaunch_core import MODEL, SHEETS, LIM, AVISO, ALERTA, known, label, forecast, simulate
 
-THRESHOLD = .025
+THRESHOLD = ALERTA
 SCENARIO_METHOD = "Normal (0, s)"
 EVENT_YES = "Excesso verificável"
 EVENT_NO = "Sem excesso verificável"
@@ -106,6 +106,7 @@ def latest_verifiable_close(blocks, product):
 def reconstruct_history(
     product, as_of_close, blocks, base, model=None,
     max_origins=10, max_horizon=9, method=SCENARIO_METHOD, persistent=False,
+    threshold=THRESHOLD,
 ):
     """Reconstitui alertas por origem histórica e verifica eventos posteriormente.
 
@@ -205,7 +206,11 @@ def reconstruct_history(
                    if real_sale is not None and real_sale > 0 else None)
             j = idx.get(target)
             active = bool(original["active"][j]) if j is not None else False
-            p_ex = float((original["cov"][:,j] >= LIM).mean()) if j is not None else None
+            can_evaluate = (
+                j is not None and bool(original.get("evaluated",
+                        np.ones(len(original["months"]),bool))[j])
+            ) if original is not None else False
+            p_ex = float((original["cov"][:,j] >= LIM).mean()) if can_evaluate else None
             p_ru = float((original["lost"][:,j] > 0).mean()) if j is not None else None
             ontime, deadline, actionable = deadlines_for_risk(
                 production, plan_months, origin, target, ltm
@@ -237,7 +242,7 @@ def reconstruct_history(
             if not active:
                 continue
             for event_type, probability in (("Excesso",p_ex), ("Ruptura",p_ru)):
-                if probability is None or probability <= THRESHOLD:
+                if probability is None or probability <= threshold:
                     continue
                 observed_outcome = (
                     event if event_type == "Excesso" else RUPTURE_UNVERIFIED

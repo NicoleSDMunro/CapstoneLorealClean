@@ -62,16 +62,24 @@ def evaluate_models(product, close, blocks, forecast_fn, known_fn):
     winner=str(eligible.iloc[0]["Modelo"]) if not eligible.empty else None
     return detail,ranking,winner
 
-def monthly_alert_rows(result, limit=180, threshold=.025):
-    """Probabilidades por mês e alertas restritos à janela crítica."""
+def monthly_alert_rows(result, limit=180, threshold=.20, warning=.025):
+    """Distingue avisos (>2,5%) de alertas (>20%) na janela crítica."""
     excess=(result["cov"]>=limit).mean(axis=0)
     shortage=(result["lost"]>0).mean(axis=0)
+    evaluated=np.asarray(result.get("evaluated",np.ones(len(excess),bool)),dtype=bool)
     rows=[]
     for j,month in enumerate(result["months"]):
         window=bool(result["active"][j])
-        rows.append({"Mês":str(month),"Excesso (%)":round(float(excess[j]*100),1),
-                     "Ruptura (%)":round(float(shortage[j]*100),1),
-                     "Janela crítica":window,
-                     "Alerta excesso":bool(window and excess[j]>.025),
-                     "Alerta ruptura":bool(window and shortage[j]>.025)})
+        excess_valid=bool(evaluated[j])
+        e=float(excess[j]) if excess_valid else None
+        r=float(shortage[j])
+        rows.append({
+            "Mês":str(month),"Excesso (%)":round(e*100,1) if e is not None else None,
+            "Ruptura (%)":round(r*100,1),
+            "Janela crítica":window,
+            "Alerta excesso":bool(window and e is not None and e>threshold),
+            "Alerta ruptura":bool(window and r>threshold),
+            "Aviso excesso":bool(window and e is not None and warning<e<=threshold),
+            "Aviso ruptura":bool(window and warning<r<=threshold),
+        })
     return pd.DataFrame(rows)
