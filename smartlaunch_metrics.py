@@ -9,7 +9,7 @@ import pandas as pd
 
 from smartlaunch_supply import future_lots
 from smartlaunch_validation import first_alerts, EVENT_YES
-from smartlaunch_core import label
+from smartlaunch_core import label, ALERTA
 
 
 
@@ -32,7 +32,7 @@ def format_opportunity_months(frame):
     return formatted
 
 
-def current_alert_opportunities(results, close, threshold=0.025, coverage_limit=180):
+def current_alert_opportunities(results, close, threshold=ALERTA, coverage_limit=180):
     """Retorna linhas e totais por evento; simulação inválida fica fora do denominador.
 
     'Prazo futuro' exige deadline > close, 'mês-limite' exige deadline == close.
@@ -54,7 +54,8 @@ def current_alert_opportunities(results, close, threshold=0.025, coverage_limit=
             if not active[idx]:
                 continue
             for typ, probability in (
-                ("Excesso", float(np.mean(cov[:, idx] >= coverage_limit))),
+                ("Excesso", float(np.mean(cov[:, idx] >= coverage_limit))
+                            if np.isfinite(cov[:, idx]).all() else 0.0),
                 ("Ruptura", float(np.mean(lost[:, idx] > 0))),
             ):
                 if probability <= threshold:
