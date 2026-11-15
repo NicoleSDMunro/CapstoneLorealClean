@@ -1,3 +1,17 @@
+# Integração do ZIP ajustado — 15/11/2026
+
+A atualização incorpora ao aplicativo atual as melhorias operacionais presentes em `CapstoneLorealClean_ajustado (1).zip`, **mantendo a experiência de três áreas e as funcionalidades já existentes**. A integração foi feita sobre a branch principal atual, não por substituição cega de arquivos.
+
+- **Motor e consistência:** sorteio de cenários por CRC32 da chave produto/fechamento/modelo para aproximar o notebook; cobertura futura do último mês do horizonte marcada `NaN`/não avaliada, sem tratá-la como ausência de excesso
+- **Duas faixas de sinal:** aviso quando chance simulada >2,5% (acompanhar), alerta quando >20% (investigar ação); a regra de 20% é exploratória e deve ser validada em novos lançamentos
+- **Critério de proteção do serviço:** cortes de lote em passos de 5%; parar no primeiro corte que gere sinal novo de ruptura ou eleve a probabilidade mensal de ruptura em mais de 2,5 p.p. Isso é um limite de cenário, **não um ótimo financeiro ou autorização para cancelar**
+- **Consultor:** Central de decisões e gráficos diferenciam aviso/alerta, a comparação de alternativas exibe se o critério do TCC foi atendido e o limite de corte do lote
+- **Validação:** painel histórico permite escolher aviso ou alerta. `tests/test_equivalencia_tcc.py` compara números de referência do ZIP ao notebook somente quando a planilha compatível é fornecida pela variável `TRIANGULO`. Sem ela, o teste é explicitamente `NÃO VERIFICADO`, não aprovado
+
+**Governança:** nenhum dado confidencial foi incluído no GitHub. Dados reais devem ser usados apenas em implantação autorizada. A versão não foi homologada como substituto do plano Oficial, e probabilidades geradas por poucos resíduos históricos não devem ser interpretadas como calibradas.
+
+---
+
 # Métricas de antecedência e comparação com o Oficial — 14/11/2026
 
 **Central de decisões:** o quarto indicador passou a ser **Alertas com oportunidade pelo LT** (N de M). O denominador é cada combinação produto × mês-alvo × tipo de risco (excesso ou ruptura), apenas na janela crítica de simulações válidas do fechamento selecionado. O numerador exige lote futuro positivo que chegue até o risco e prazo **posterior ao fechamento**, ou **no mês-limite** (sempre a confirmar). O detalhamento separa quantos são estritamente futuros e quantos estão no mês-limite. Não chama ausência de simulação de risco zero. A exportação Excel inclui aba `Prazo dos alertas` com ocorrências individuais.
