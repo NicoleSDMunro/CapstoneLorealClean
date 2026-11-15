@@ -793,21 +793,30 @@ elif page == "Riscos de estoque":
     with ex_col:
         with st.container(border=True):
             st.markdown("#### Chance de estoque acima de seis meses")
-            st.caption("Cobertura ≥ 180 dias · linha tracejada indica limiar de alerta de 2,5%.")
+            st.caption("Cobertura ≥ 180 dias · linha pontilhada: aviso 2,5%; "
+                       "tracejada: alerta 20%. Último mês sem cobertura futura: não avaliado.")
             st.plotly_chart(risk_plot(res,frame,"Excesso (%)","#b42318"),use_container_width=True)
     with ru_col:
         with st.container(border=True):
             st.markdown("#### Chance de venda perdida (ruptura)")
-            st.caption("Venda não atendida · linha tracejada indica limiar de alerta de 2,5%.")
+            st.caption("Venda não atendida · linha pontilhada: aviso 2,5%; "
+                       "tracejada: alerta 20%.")
             st.plotly_chart(risk_plot(res,frame,"Ruptura (%)","#d39b24"),use_container_width=True)
     st.subheader("Riscos e encaminhamentos por mês")
+    st.caption(CHANCE_NOTE)
     display=frame[["Mês","Previsão (un.)","Estoque P50 (un.)",
                    "Cobertura P50 (dias)","Excesso (%)","Ruptura (%)",
-                   "Janela crítica","Alerta excesso","Alerta ruptura"]]
+                   "Janela crítica","Aviso excesso","Aviso ruptura",
+                   "Alerta excesso","Alerta ruptura"]]
     st.dataframe(display,hide_index=True,use_container_width=True)
     flagged=frame[frame["Alerta excesso"]|frame["Alerta ruptura"]]
     if flagged.empty:
-        st.info("Sem alertas disparados dentro da janela crítica neste fechamento.")
+        warnings = frame[frame["Aviso excesso"]|frame["Aviso ruptura"]]
+        if not warnings.empty:
+            st.info("Existem avisos (2,5%–20%), mas nenhum alerta (>20%) "
+                    "na janela crítica. Acompanhar no próximo fechamento.")
+        else:
+            st.info("Sem alerta (>20%) nem aviso (>2,5%) na janela crítica.")
     else:
         for _,row in flagged.iterrows():
             typ="excesso" if row["Alerta excesso"] else "ruptura"
@@ -826,7 +835,9 @@ elif page == "Riscos de estoque":
                               operational_model=st.session_state["operational_"+product])
             if target in past_sim["months"]:
                 j=past_sim["months"].index(target)
-                if bool(past_sim["active"][j]):
+                if bool(past_sim["active"][j]) and bool(
+                    past_sim.get("evaluated", np.ones(len(past_sim["months"]),bool))[j]
+                ):
                     past.append({"Fechamento":label(prev_close),
                                  "Excesso (%)":100*float((past_sim["cov"][:,j]>=LIM).mean()),
                                  "Ruptura (%)":100*float((past_sim["lost"][:,j]>0).mean())})
@@ -1417,6 +1428,11 @@ elif page == "Validação histórica dos alertas":
         )
     horizon=st.select_slider("Horizonte máximo por previsão (meses)",[3,6,9,12],value=9,
                             key="validation_horizon")
+    level=st.radio("Contar a partir de",[
+        "Alerta (chance simulada > 20%)",
+        "Aviso (chance simulada > 2,5%)",
+    ],horizontal=True,key="validation_level")
+    level_threshold=LIMIT_ALERT if level.startswith("Alerta") else LIMIT_WARN
     initial_model=MODEL[product]
     chosen_operational=st.session_state["operational_"+product]
     model_choices=[initial_model]
@@ -1432,7 +1448,7 @@ elif page == "Validação histórica dos alertas":
         projections, alerts, gaps=reconstruct_history(
             product, verification_close, blocks, base, model=model,
             max_origins=max_origins, max_horizon=horizon,
-            method=DEFAULT_METHOD, persistent=False
+            method=DEFAULT_METHOD, persistent=False,threshold=level_threshold
         )
     earliest=first_alerts(alerts)
     verified=(
@@ -1447,6 +1463,8 @@ elif page == "Validação histórica dos alertas":
     metrics[1].metric("Excessos verificáveis",int(confirmed) if len(verified) else "—")
     metrics[2].metric("Alertas de excesso não confirmados",int(false_alarms) if len(verified) else "—")
     metrics[3].metric("Alertas com prazo teórico aberto",timely if not earliest.empty else "—")
+    st.caption("Filtro atual: " + level + ". Avisos e alertas não devem ser misturados "
+               "com resultados do estudo que utilizaram outro limiar.")
     st.caption(
         "Os resultados contam **meses-alvo × tipo de risco distintos**, usando a primeira emissão "
         "para evitar contabilizar o mesmo problema repetido em revisões sobrepostas. "
@@ -1591,7 +1609,7 @@ elif page == "Histórico e metodologia":
 erro aditivo Normal(0,s), 1.000 trajetórias, estoque com vendas perdidas e
 cobertura pelo consumo futuro. Excesso se cobertura ≥ 180 dias, ruptura se
 venda perdida > 0. Os alertas são aplicados apenas dentro da janela crítica
-e quando o evento supera o limite de 2,5% dos cenários.
+e quando o evento supera o limite de 2,5% dos cenários (aviso), e **alerta** se supera 20%.
 
 **Janela crítica:** teto(lead time em semanas × 7/30) +
 teto(cobertura-alvo / 30) + 1 mês.
