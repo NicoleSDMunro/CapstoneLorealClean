@@ -10,7 +10,7 @@ tree=ast.parse(src)
 wanted={"rows_from_sim","eligible_lots","classify_action","scenario_plan"}
 functions=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in wanted]
 assert {n.name for n in functions}==wanted
-ns={"np":np,"pd":pd,"LIM":180,"LIMIT_ALERT":.025, "future_lots":future_lots,
+ns={"np":np,"pd":pd,"LIM":180,"LIMIT_ALERT":.20, "LIMIT_WARN":.025, "future_lots":future_lots,
     "label":lambda p: p.strftime("%m/%Y")}
 exec(compile(ast.fix_missing_locations(ast.Module(body=functions,type_ignores=[])),
              "smartlaunch_rules", "exec"),ns)
