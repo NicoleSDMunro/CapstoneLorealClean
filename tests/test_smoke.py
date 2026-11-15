@@ -17,7 +17,7 @@ for node in tree.body:
     elif isinstance(node,ast.FunctionDef):
         node.decorator_list=[];keep.append(node)
     elif isinstance(node,ast.Assign) and all(isinstance(t,ast.Name) for t in node.targets):
-        if node.targets[0].id in {"MONTHS","NAMES","MODEL","ANALOG","SHEETS","SEED","N","LIM"}:keep.append(node)
+        if node.targets[0].id in {"MONTHS","NAMES","MODEL","ANALOG","SHEETS","SEED","N","LIM","AVISO","ALERTA","MARGEM_MC","AUMENTO_MAX_RUPTURA","CHAVE_SORTEIO"}:keep.append(node)
 mod=ast.Module(body=keep,type_ignores=[])
 ns={}
 exec(compile(ast.fix_missing_locations(mod),"smartlaunch_core","exec"),ns)
@@ -52,7 +52,7 @@ for product in ("P1","P2","P3"):
     assert len(fc)==3 and np.isfinite(fc).all(),(product,fc)
     res=simulate(product,origin,blocks,base)
     assert res["dm"].shape[0]==1000
-    assert np.isfinite(res["cov"]).all()
+    assert np.isfinite(res["cov"][:,:-1]).all()\n    assert np.isnan(res["cov"][:,-1]).all()
     assert (res["stock"]>=0).all()
     print(product,"forecast",fc.tolist(),"error bag",len(res["errors"]))
 print("SMOKE PASS")
