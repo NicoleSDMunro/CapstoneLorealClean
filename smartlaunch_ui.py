@@ -1013,11 +1013,43 @@ elif page == "Impacto operacional":
                     "já existente naquele mês; escolha um alvo posterior para estudar "
                     "seu efeito na acumulação futura.")
         candidates,baseline=evaluate_lot_options(res,chosen_lot,month_idx)
+        limits=tcc_lot_limits(res,chosen_lot)
+        in_window=bool(res["active"][chosen_lot])
+        with st.container(border=True):
+            st.markdown("**Maior corte pelo critério do TCC**")
+            if not in_window:
+                st.caption("Este lote chega fora da janela crítica. Os limites "
+                           "de corte devem ser interpretados somente dentro da "
+                           "janela de decisão validada.")
+            else:
+                l1,l2=st.columns([1,2])
+                l1.metric(
+                    "Corte máximo (passos de 5%)",
+                    ("−"+str(limits["max_cut_pct"])+"%") if limits["max_cut_pct"] else "Nenhum",
+                    help="Maior redução contínua na grade de 5% antes de criar "
+                         "novo sinal de ruptura ou aumentar a chance mensal de "
+                         "ruptura em mais de 2,5 pontos percentuais."
+                )
+                l2.caption(
+                    fmt(limits["max_cut_units"])+" unidades de "+
+                    fmt(lot["units"])+" planejadas. A regra para no primeiro "
+                    "passo que viola o limite; não equivale a uma recomendação "
+                    "economicamente ótima nem confirma viabilidade contratual."
+                )
         chosen_option=st.selectbox(
             "Alternativa a comparar",candidates["Alternativa"].tolist(),
             index=0,key="impact_action"
         )
         selected=candidates[candidates["Alternativa"]==chosen_option].iloc[0]
+        if not bool(selected["Dentro do critério do TCC"]):
+            st.warning("Esta alternativa viola o critério de proteção do serviço: "
+                       "cria sinal novo ou eleva a chance de ruptura além de 2,5 "
+                       "pontos em algum mês. É apresentada para comparação, "
+                       "não como corte recomendado.")
+        elif chosen_option != "Manter plano":
+            st.info("Esta alternativa permanece dentro do critério simulado do "
+                    "TCC, sujeito à confirmação de lead time, contratos e "
+                    "quantidades mínimas.")
         st.subheader("Efeito da alternativa selecionada")
         row1=st.columns(4)
         excess_change=float(selected["Excesso potencialmente evitado (un.)"])
