@@ -10,9 +10,9 @@ months=list(pd.period_range("2026-12", periods=4, freq="M"))
 close=pd.Period("2026-11",freq="M")
 # 20 cenários: excesso dez 10%, jan 20%, fev 40%; ruptura dez 0, jan 15%.
 cov=np.full((20,4),90.)
-cov[:5,0]=220
-cov[:6,1]=220
-cov[:8,2]=220
+cov[:6,0]=220
+cov[:8,1]=220
+cov[:10,2]=220
 lost=np.zeros((20,4))
 lost[:3,1]=15
 res={"months":months,"active":np.array([True,True,True,False]),
@@ -23,8 +23,8 @@ assert summary["alert"]
 assert summary["type"]=="Excesso"
 assert summary["first_month"]==months[0]
 assert summary["peak_month"]==months[2]
-assert abs(summary["peak_probability"]-.40)<1e-10
-assert abs(summary["first_probability"]-.25)<1e-10
+assert abs(summary["peak_probability"]-.50)<1e-10
+assert abs(summary["first_probability"]-.30)<1e-10
 # A produção jan/27 não chega para mitigar um risco de dez/26.
 assert not summary["first_target_has_changeable_lot"]
 assert summary["deadline"] is None
@@ -42,7 +42,7 @@ assert s["time_left_months"]==1
 # Ruptura como primeiro risco: não recomendar corte de lote.
 cov=np.full((20,4),90.)
 lost=np.zeros((20,4))
-lost[:5,0]=15
+lost[:6,0]=15
 res["cov"]=cov
 res["lost"]=lost
 s=card_summary("P2",res,close)
