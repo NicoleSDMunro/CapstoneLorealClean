@@ -468,13 +468,14 @@ if nav == "Análise do produto":
         summary = card_summary(chosen, current, close)
         frame_product = rows_from_sim(current)
         active = frame_product[frame_product["Janela crítica"]]
-        ex_peak = active.loc[active["Excesso (%)"].idxmax()] if not active.empty else None
+        ex_valid=active[active["Excesso (%)"].notna()]
+        ex_peak = ex_valid.loc[ex_valid["Excesso (%)"].idxmax()] if not ex_valid.empty else None
         ru_peak = active.loc[active["Ruptura (%)"].idxmax()] if not active.empty else None
         a,b,c = st.columns(3)
-        a.metric("Maior chance de excesso", str(ex_peak["Excesso (%)"]).replace(".", ",") + "%"
-                 if ex_peak is not None else "—")
-        b.metric("Maior chance de ruptura", str(ru_peak["Ruptura (%)"]).replace(".", ",") + "%"
-                 if ru_peak is not None else "—")
+        a.metric("Maior chance de excesso", chance_txt(ex_peak["Excesso (%)"]/100)
+                 if ex_peak is not None else "não avaliado")
+        b.metric("Maior chance de ruptura", chance_txt(ru_peak["Ruptura (%)"]/100)
+                 if ru_peak is not None else "não avaliado")
         c.metric("Lotes futuros positivos", summary.get("future_lot_count", 0))
         st.caption("**Produção e prazo:** " + summary["supply_note"])
         if summary["alert"]:
@@ -484,8 +485,13 @@ if nav == "Análise do produto":
                        f'{summary["peak_probability"]*100:.1f}%' +
                        " em " + label(summary["peak_month"]) +
                        ". Prazos calculados pelo lead time são teóricos.")
+        elif summary.get("warning"):
+            st.info("**Aviso: acompanhar.** "+summary["message"]+
+                    " Primeiro aviso: "+summary["warning_type"].lower()+" em "+
+                    label(summary["warning_month"])+".")
         else:
-            st.info("Sem gatilho na janela crítica deste fechamento. Mantenha o acompanhamento mensal.")
+            st.info("Sem alerta ou aviso na janela crítica; reavaliar mensalmente.")
+        st.caption(CHANCE_NOTE)
         if ex_peak is not None and ru_peak is not None:
             st.caption("Excesso: pico em " + str(ex_peak["Mês"]) +
                        " · Ruptura: pico em " + str(ru_peak["Mês"]) +
@@ -529,8 +535,9 @@ if page == "Visão geral":
         summary = card_summary(product,res,close)
         frame = rows_from_sim(res)
         active = frame[frame["Janela crítica"]]
-        exrow = (active.loc[active["Excesso (%)"].idxmax()]
-                 if not active.empty else None)
+        finite_ex = active[active["Excesso (%)"].notna()]
+        exrow = (finite_ex.loc[finite_ex["Excesso (%)"].idxmax()]
+                 if not finite_ex.empty else None)
         rurow = (active.loc[active["Ruptura (%)"].idxmax()]
                  if not active.empty else None)
         ex = float(exrow["Excesso (%)"]) if exrow is not None else 0.0
@@ -554,8 +561,8 @@ if page == "Visão geral":
                                                  coverage_limit=LIM)
     metric_cols=st.columns(4)
     metric_cols[0].metric("Produtos analisados",f"{ready_count}/{len(MODEL)}")
-    metric_cols[1].metric("Com sinal de excesso",f"{alert_excess}/{ready_count}" if ready_count else "—")
-    metric_cols[2].metric("Com sinal de ruptura",f"{alert_shortage}/{ready_count}" if ready_count else "—")
+    metric_cols[1].metric("Com alerta de excesso",f"{alert_excess}/{ready_count}" if ready_count else "—")
+    metric_cols[2].metric("Com alerta de ruptura",f"{alert_shortage}/{ready_count}" if ready_count else "—")
     metric_cols[3].metric("Alertas com oportunidade pelo LT",
                           f'{opportunities["possible"]}/{opportunities["total"]}'
                           if opportunities["total"] else "—")
@@ -576,9 +583,11 @@ if page == "Visão geral":
     else:
         st.caption("Nenhum alerta probabilístico na janela crítica dos produtos "
                    "com simulação válida. A taxa de oportunidades não é calculável.")
-    st.caption("Sinal = probabilidade acima de 2,5% na janela crítica. "
-               "Oportunidade pelo LT NÃO é um alerta confirmado, nem autorização de "
-               "produção. Uma ausência de simulação não significa risco zero.")
+    st.caption("Alerta = chance simulada acima de 20% na janela crítica; "
+               "aviso = acima de 2,5% até 20%. A taxa de oportunidades usa "
+               "somente os alertas. Prazo pelo LT não garante alteração "
+               "contratual; ausência de simulação não é risco zero.")
+    st.caption(CHANCE_NOTE)
 
     st.subheader("Prioridades para o planejamento")
     for item in snapshots:
@@ -604,7 +613,8 @@ if page == "Visão geral":
             k2.metric("Ruptura · " + item["rumonth"],f"{ru:.1f}%".replace(".",","))
             with k3:
                 st.markdown("**Encaminhamento**")
-                st.write(summary["action"] if summary["alert"] else "Monitoramento")
+                st.write(summary["action"] if summary["alert"] else
+                         "Acompanhar (aviso)" if summary.get("warning") else "Monitoramento")
                 if summary["alert"]:
                     st.caption(summary["urgency"] +
                                (" · " + label(summary["deadline"])
@@ -617,8 +627,11 @@ if page == "Visão geral":
                 st.caption("Primeiro risco observado pelo modelo: " + summary["type"].lower() +
                            " em " + label(summary["first_month"]) +
                            ". Os números não substituem análise de fornecedor/comercial.")
+            elif summary.get("warning"):
+                st.markdown("**O que fazer agora:** monitorar a evolução no fechamento seguinte; "
+                            "não acionar fornecedor com base apenas no aviso.")
             else:
-                st.caption("Não há gatilho dentro da janela crítica. "
+                st.caption("Nenhum aviso ou alerta na janela crítica. "
                            "Reavaliar no próximo fechamento.")
             st.caption("Modelo operacional: " + st.session_state["operational_"+product])
             st.caption("Situação da produção: " + summary["supply_note"])
@@ -658,8 +671,8 @@ if page == "Visão geral":
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     with st.expander("Ver linha do tempo dos sinais por produto"):
-        st.caption("E = excesso · R = ruptura · P = prazo teórico aberto. "
-                   "Sinais apenas na janela crítica.")
+        st.caption("E/R = alertas de excesso/ruptura (>20%) · e/r claros = avisos "
+                   "(>2,5%) · P = prazo teórico. Apenas janela crítica.")
         st.markdown(timeline_markup(results,close),unsafe_allow_html=True)
 
     st.divider()
