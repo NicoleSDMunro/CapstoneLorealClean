@@ -2,6 +2,7 @@
 import io
 import math
 import re
+import zlib
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -18,6 +19,31 @@ SHEETS={"P1":"PRODUTO 1","P2":"PRODUTO 2","P3":"PRODUTO 3"}
 SEED=20261021
 N=1000
 LIM=180
+# O ZIP do TCC usa dois níveis distintos: aviso e alerta para tomada de decisão.
+AVISO=0.025
+ALERTA=0.20
+# Margem aproximada de simulação Monte Carlo com 1.000 trajetórias; não mede
+# incerteza total do modelo.
+MARGEM_MC=0.025
+AUMENTO_MAX_RUPTURA=0.025
+CHAVE_SORTEIO={"MEA-P":"3C-P · 3C com índice de pipe","MEA":"3C","Oficial":"Oficial"}
+
+
+def nivel(p):
+    """Separa alerta (>20%), aviso (>2,5%) e não avaliado."""
+    if p is None or not np.isfinite(p):
+        return "não avaliado"
+    return "alerta" if p>ALERTA else "aviso" if p>AVISO else "—"
+
+
+def chance_txt(p):
+    """Exibe chances simuladas sem casas decimais excessivamente precisas."""
+    if p is None or not np.isfinite(p):
+        return "não avaliado"
+    v=100*p
+    if v<1: return "< 1%"
+    if v>99: return "> 99%"
+    return f"{v:.0f}%"
 
 def period(v):
     if isinstance(v,pd.Period): return v
@@ -164,10 +190,14 @@ def history_errors(p,c,blocks,model=None):
     return np.asarray(rows,dtype=float),len(rows)
 
 def coverage(e,dm):
-    """Forward cover, 30 dias/mês; extrapolação após último mês pela última demanda."""
-    out=np.zeros_like(e)
+    """Forward cover com 30 dias/mês; último mês é não avaliado.
+
+    Conforme o ZIP ajustado, a cobertura final exige ao menos um mês
+    de demanda futura dentro do horizonte; NaN não é risco zero.
+    """
+    out=np.full(e.shape,np.nan)
     n,h=e.shape
-    for j in range(h):
+    for j in range(h-1):
         stock=e[:,j].copy()
         days=np.zeros(n)
         active=stock>0
@@ -212,17 +242,26 @@ def simulate(p,c,blocks,base,method="Normal (0, s)",persistent=False,operational
     errors,num=history_errors(p,c,blocks,model=operational_model)
     if num<2:raise ValueError(f"Apenas {num} erros de arranque conhecidos. Simulação indisponível (mínimo 2).")
     sd=float(np.std(errors,ddof=1))
-    rng=np.random.default_rng(SEED+int(p[1:])*1000+c.ordinal)
-    if method=="Normal (0, s)":
-        eps=rng.normal(0,sd,(N,1 if persistent else len(months)))
+    # Mesmo esquema de sorteio do notebook: seed + CRC32 de
+    # produto, fechamento e nome interno do modelo, por mês.
+    model_used=operational_model or MODEL[p]
+    chave=f"{p}{c}{CHAVE_SORTEIO.get(model_used,model_used)}est"
+    rng=np.random.default_rng(SEED+zlib.crc32(chave.encode())%100000)
+    def draw():
+        if method=="Normal (0, s)":
+            return rng.normal(0.0,sd,N)
+        return rng.choice(errors-errors.mean(),N)
+    if persistent:
+        eps=np.repeat(draw()[:,None],len(months),axis=1)
     else:
-        eps=rng.choice(errors,size=(N,1 if persistent else len(months)),replace=True)-errors.mean()
-    if persistent:eps=np.repeat(eps,len(months),axis=1)
+        eps=np.column_stack([draw() for _ in months])
     dm=np.maximum(center+eps,0)
     stock,lost,cov=balance(e0,production,dm)
     days,lt=base[p];ltm=math.ceil(lt*7/30);window=ltm+math.ceil(days/30)+1
     active=np.array([j<window for j in range(len(months))])
-    return dict(months=months,production=production,e0=e0,center=center,errors=errors,sd=sd,dm=dm,stock=stock,lost=lost,cov=cov,active=active,ltm=ltm,window=window)
+    evaluated=np.array([j<len(months)-1 for j in range(len(months))])
+    return dict(months=months,production=production,e0=e0,center=center,errors=errors,sd=sd,dm=dm,stock=stock,lost=lost,cov=cov,active=active,ltm=ltm,window=window,
+                evaluated=evaluated,model=model_used)
 
 def impacts(res,p,new_plan,baseline):
     s,l,c=balance(res["e0"],new_plan,res["dm"])
