@@ -52,7 +52,8 @@ for product in ("P1","P2","P3"):
     assert len(fc)==3 and np.isfinite(fc).all(),(product,fc)
     res=simulate(product,origin,blocks,base)
     assert res["dm"].shape[0]==1000
-    assert np.isfinite(res["cov"][:,:-1]).all()\n    assert np.isnan(res["cov"][:,-1]).all()
+    assert np.isfinite(res["cov"][:,:-1]).all()
+    assert np.isnan(res["cov"][:,-1]).all()
     assert (res["stock"]>=0).all()
     print(product,"forecast",fc.tolist(),"error bag",len(res["errors"]))
 print("SMOKE PASS")
