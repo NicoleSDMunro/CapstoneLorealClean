@@ -6,7 +6,7 @@ Não estima benefício financeiro nem decisões realmente implementadas.
 import numpy as np
 import pandas as pd
 
-from smartlaunch_core import balance, LIM
+from smartlaunch_core import balance, LIM, AUMENTO_MAX_RUPTURA
 from smartlaunch_supply import future_lots
 
 OPTIONS = (
@@ -94,6 +94,61 @@ def outcome_metrics(res, plan, target_index):
     }
 
 
+
+def month_signals(res, plan):
+    """Sinais por mês da janela crítica, conforme os gatilhos de percentil do TCC."""
+    demand=np.asarray(res["dm"],dtype=float)
+    stock,lost,cover=balance(res["e0"],np.asarray(plan,dtype=float),demand)
+    active=np.asarray(res["active"],dtype=bool)
+    excess=set();rupture=set();p_rup=[]
+    for i in np.flatnonzero(active):
+        if np.isfinite(cover[:,i]).all() and np.nanpercentile(cover[:,i],97.5)>=LIM:
+            excess.add(i)
+        if np.percentile(lost[:,i],97.5)>0:
+            rupture.add(i)
+        p_rup.append(float((lost[:,i]>0).mean()))
+    return excess,rupture,np.array(p_rup)
+
+
+def tcc_check(res, plan, base_signals=None):
+    """Compara sinais de um lote com o plano original, sem afirmar executabilidade."""
+    exc0,rup0,p0=base_signals if base_signals is not None else month_signals(res,res["production"])
+    exc,rup,p=month_signals(res,plan)
+    rise=float(np.max(p-p0)) if len(p) else 0.
+    return {"new_excess":bool(exc-exc0),
+            "new_rupture":bool(rup-rup0),
+            "max_rupture_rise":rise}
+
+
+def tcc_lot_limits(res, lot_index, step=5):
+    """Maior corte e aumento sequencial em passos de 5%, pelo critério do ZIP.
+
+    Para no primeiro passo que viola a regra; isso não é otimização global.
+    """
+    plan0=np.asarray(res["production"],dtype=float)
+    q=float(plan0[lot_index])
+    if q<=0:
+        raise ValueError("O lote precisa ter quantidade positiva.")
+    if step<=0 or 100%step:
+        raise ValueError("O passo precisa dividir 100.")
+    base=month_signals(res,plan0)
+    cut=0
+    for pct in range(step,101,step):
+        plan=plan0.copy();plan[lot_index]=q*(1-pct/100)
+        chk=tcc_check(res,plan,base)
+        if chk["new_rupture"] or chk["max_rupture_rise"]>AUMENTO_MAX_RUPTURA:
+            break
+        cut=pct
+    increase=0
+    for pct in range(step,101,step):
+        plan=plan0.copy();plan[lot_index]=q*(1+pct/100)
+        if tcc_check(res,plan,base)["new_excess"]:
+            break
+        increase=pct
+    return {"max_cut_pct":cut,"max_cut_units":q*cut/100,
+            "max_increase_pct":increase,"step":step}
+
+
 def evaluate_lot_options(res, lot_index, target_index):
     """Retorna (tabela de planos, métricas baseline); sem mudar res em memória."""
     if lot_index not in range(len(res["production"])):
@@ -103,11 +158,19 @@ def evaluate_lot_options(res, lot_index, target_index):
     if initial<=0:
         raise ValueError("É necessário um lote positivo para alterar.")
     baseline=outcome_metrics(res,baseline_plan,target_index)
+    base_signals=month_signals(res,baseline_plan)
     records=[]
     for name,factor in OPTIONS:
         plan=baseline_plan.copy()
         plan[lot_index]=round(initial*factor)
         values=outcome_metrics(res,plan,target_index)
+        chk=tcc_check(res,plan,base_signals)
+        if factor<1:
+            ok=not chk["new_rupture"] and chk["max_rupture_rise"]<=AUMENTO_MAX_RUPTURA
+        elif factor>1:
+            ok=not chk["new_excess"]
+        else:
+            ok=True
         records.append({
             "Alternativa": name,
             "Quantidade do lote (un.)": float(plan[lot_index]),
@@ -126,6 +189,11 @@ def evaluate_lot_options(res, lot_index, target_index):
             "Risco excesso na janela (%)": values["risk_excess_window_pct"],
             "Risco ruptura na janela (%)": values["risk_rupture_window_pct"],
             "Meses extrapolados após alvo": values["extrapolated_months"],
+            "Cria sinal novo de ruptura": chk["new_rupture"],
+            "Cria sinal novo de excesso": chk["new_excess"],
+            "Maior aumento da chance de ruptura num mês (p.p.)":
+                round(100*chk["max_rupture_rise"],1),
+            "Dentro do critério do TCC": ok,
         })
     frame=pd.DataFrame(records)
     # Alternativa não-dominada se nenhum outro plano tiver menos excesso E
