@@ -945,9 +945,13 @@ elif page == "Impacto operacional":
 
     st.markdown("**Compare o impacto de lotes futuros registrados no Triângulo.** "
                 "Prazo futuro ou mês-limite não significa alteração autorizada.")
-    active_months=[(i,m) for i,m in enumerate(res["months"]) if bool(res["active"][i])]
+    evaluated=np.asarray(res.get("evaluated",np.ones(len(res["months"]),bool)),dtype=bool)
+    active_months=[(i,m) for i,m in enumerate(res["months"])
+                   if bool(res["active"][i]) and bool(evaluated[i])]
     if not active_months:
-        st.warning("A janela crítica não contém meses avaliáveis.")
+        st.warning("Não há mês com cobertura de excesso avaliável na janela crítica. "
+                   "O último mês do horizonte precisa de demanda posterior; "
+                   "não interprete cobertura ausente como risco zero.")
         st.stop()
     excess_probs=(np.asarray(res["cov"])>=LIM).mean(axis=0)
     excess_alerts=[i for i,m in active_months if excess_probs[i] > LIMIT_ALERT]
