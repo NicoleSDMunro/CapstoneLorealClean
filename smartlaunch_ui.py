@@ -11,7 +11,8 @@ import streamlit as st
 
 from smartlaunch_core import (
     MODEL, SHEETS, LIM, N, label, load_data, known, forecast,
-    simulate, impacts, fmt,
+    simulate, impacts, fmt, AVISO, ALERTA, MARGEM_MC,
+    nivel, chance_txt,
 )
 from smartlaunch_monthly import evaluate_models
 from smartlaunch_priority import card_summary
@@ -19,7 +20,7 @@ from smartlaunch_metrics import (current_alert_opportunities, compare_verified_e
                                  format_opportunity_months)
 from smartlaunch_supply import future_lots, supply_diagnosis
 from smartlaunch_impact import (editable_lots, outcome_metrics, evaluate_lot_options,
-                                historical_mape_vs_official)
+                                historical_mape_vs_official, tcc_lot_limits, tcc_check)
 from smartlaunch_validation import (
     reconstruct_history, first_alerts, latest_verifiable_close,
     available_origin_reviews, EVENT_YES, EVENT_NO,
@@ -81,7 +82,16 @@ LEGACY_RESULTS = {
     "Histórico e metodologia": "Metodologia e auditoria",
 }
 DEFAULT_METHOD = "Normal (0, s)"
-LIMIT_ALERT = 0.025
+LIMIT_WARN = AVISO
+LIMIT_ALERT = ALERTA
+CHANCE_NOTE = ("As chances são **simuladas** a partir de 1.000 trajetórias e poucos erros "
+               "históricos. Não têm calibração comprovada. O erro de Monte Carlo "
+               "na frequência simulada pode chegar a cerca de ±3 p.p., mas isso "
+               "NÃO captura a incerteza do modelo. **Aviso > 2,5%** = acompanhar; "
+               "**alerta > 20%** = avaliar uma ação.")
+
+def pct_cell(value):
+    return None if value is None or not np.isfinite(value) else int(round(float(value)))
 
 
 def navigate(page, product=None):
@@ -170,23 +180,30 @@ def show_available_forecast(product, close, blocks):
 def rows_from_sim(res):
     ex = (res["cov"] >= LIM).mean(axis=0)
     ru = (res["lost"] > 0).mean(axis=0)
+    evaluated = np.asarray(res.get("evaluated",
+                     np.ones(len(res["months"]), bool)), dtype=bool)
     stock = np.percentile(res["stock"], 50, axis=0)
-    cover = np.percentile(res["cov"], 50, axis=0)
+    cover = np.nanmedian(res["cov"], axis=0)
     rows = []
     for j, month in enumerate(res["months"]):
         window = bool(res["active"][j])
         deadline = month - res["ltm"]
+        e = float(ex[j]) if evaluated[j] else None
+        r = float(ru[j])
         rows.append({
             "Período": month,
             "Mês": label(month),
-            "Excesso (%)": round(float(ex[j])*100, 1),
-            "Ruptura (%)": round(float(ru[j])*100, 1),
-            "Cobertura P50 (dias)": round(float(cover[j])),
+            "Excesso (%)": round(e*100,1) if e is not None else np.nan,
+            "Ruptura (%)": round(r*100,1),
+            "Cobertura P50 (dias)": round(float(cover[j])) if evaluated[j] else np.nan,
             "Estoque P50 (un.)": round(float(stock[j])),
             "Previsão (un.)": round(float(res["center"][j])),
             "Janela crítica": window,
-            "Alerta excesso": window and ex[j] > LIMIT_ALERT,
-            "Alerta ruptura": window and ru[j] > LIMIT_ALERT,
+            "Cobertura avaliável": bool(evaluated[j]),
+            "Alerta excesso": bool(window and e is not None and e>LIMIT_ALERT),
+            "Alerta ruptura": bool(window and r>LIMIT_ALERT),
+            "Aviso excesso": bool(window and e is not None and LIMIT_WARN<e<=LIMIT_ALERT),
+            "Aviso ruptura": bool(window and LIMIT_WARN<r<=LIMIT_ALERT),
             "Prazo do lote": label(deadline),
         })
     return pd.DataFrame(rows)
@@ -254,24 +271,37 @@ def classify_action(res, close, risk_month, risk_type):
     )
 
 
-def risk_plot(res, rowset, column, color):
+def risk_plot(res, rowset, column, color, light="#f2bdb5"):
+    """Barra escura = alerta, clara = aviso, cinza = sem gatilho/fora do período."""
     vals = rowset[column].to_numpy(float)
     active = rowset["Janela crítica"].to_numpy(bool)
-    is_alert = vals > 100*LIMIT_ALERT
-    colors = [color if active[i] and is_alert[i] else "#d8d8d6" for i in range(len(vals))]
-    fig = go.Figure()
+    colors=[]
+    for i,v in enumerate(vals):
+        if not active[i] or not np.isfinite(v):
+            colors.append("#d8d8d6")
+        elif v>100*LIMIT_ALERT:
+            colors.append(color)
+        elif v>100*LIMIT_WARN:
+            colors.append(light)
+        else:
+            colors.append("#d8d8d6")
+    texts=[chance_txt(v/100) if np.isfinite(v) else "não avaliado" for v in vals]
+    fig=go.Figure()
     fig.add_trace(go.Bar(
-        x=rowset["Mês"], y=vals, marker_color=colors, text=[f"{x:.1f}" for x in vals],
-        textposition="outside", hovertemplate="%{x}: %{y:.1f}%<extra></extra>",
+        x=rowset["Mês"],y=np.nan_to_num(vals),marker_color=colors,text=texts,
+        textposition="outside",hovertemplate="%{x}: %{text}<extra></extra>",
     ))
-    fig.add_hline(y=100*LIMIT_ALERT, line_width=1, line_dash="dash", line_color="#444",
-                  annotation_text="Gatilho 2,5%", annotation_position="top left")
-    ymax = max(10, float(vals.max())*1.25) if len(vals) else 10
+    fig.add_hline(y=100*LIMIT_WARN,line_width=1,line_dash="dot",line_color="#777",
+                  annotation_text="Aviso 2,5%",annotation_position="top left")
+    fig.add_hline(y=100*LIMIT_ALERT,line_width=1,line_dash="dash",line_color="#333",
+                  annotation_text="Alerta 20%",annotation_position="top left")
+    finite=vals[np.isfinite(vals)]
+    ymax=max(30,float(finite.max())*1.25) if len(finite) else 30
     fig.update_layout(
-        template="plotly_white", height=315, margin=dict(l=8,r=12,t=25,b=10),
-        paper_bgcolor="white", plot_bgcolor="white", yaxis=dict(title="Probabilidade (%)",range=[0,ymax]),
-        xaxis=dict(title=None), showlegend=False, font=dict(color="#222"),
-    )
+        template="plotly_white",height=315,margin=dict(l=8,r=12,t=25,b=10),
+        paper_bgcolor="white",plot_bgcolor="white",
+        yaxis=dict(title="Chance simulada (%)",range=[0,ymax]),
+        xaxis=dict(title=None),showlegend=False,font=dict(color="#222"))
     return fig
 
 
@@ -294,9 +324,13 @@ def timeline_markup(panels, close):
             dots=[]
             item = by_month.get(month)
             if item is not None and item["Alerta excesso"]:
-                dots.append('<span class="tdot tdot-e" title="Excesso">E</span>')
+                dots.append('<span class="tdot tdot-e" title="Alerta de excesso (>20%)">E</span>')
+            elif item is not None and item["Aviso excesso"]:
+                dots.append('<span class="tdot tdot-e" style="opacity:.4" title="Aviso de excesso (>2,5%)">e</span>')
             if item is not None and item["Alerta ruptura"]:
-                dots.append('<span class="tdot tdot-r" title="Ruptura">R</span>')
+                dots.append('<span class="tdot tdot-r" title="Alerta de ruptura (>20%)">R</span>')
+            elif item is not None and item["Aviso ruptura"]:
+                dots.append('<span class="tdot tdot-r" style="opacity:.4" title="Aviso de ruptura (>2,5%)">r</span>')
             if any(lot["prazo"] == month and lot["alterável"] for lot in lots):
                 dots.append('<span class="tdot tdot-p" title="Prazo de lote">P</span>')
             elements.append('<div class="timeline-cell">' + (''.join(dots) or '·') + '</div>')
