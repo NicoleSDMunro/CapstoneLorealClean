@@ -78,7 +78,7 @@ assert forecasts["Previsão no fechamento (un.)"].notna().all()
 assert (forecasts["Venda realizada (un.)"].notna() | (forecasts["_alvo"]>last)).all()
 if not alerts.empty:
     assert alerts["Na janela crítica"].all()
-    assert (alerts["Probabilidade do alerta (%)"]>2.5).all()
+    assert (alerts["Probabilidade do alerta (%)"]>20).all()
     assert all(x==RUPTURE_UNVERIFIED for x in alerts.loc[
         alerts["Tipo de alerta"]=="Ruptura","Status observado"
     ])
