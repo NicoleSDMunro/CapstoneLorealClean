@@ -27,7 +27,7 @@ def forecast_figure(realized, months, operational, official, simulations, close,
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=past_x, y=historical.to_numpy(float), mode="lines+markers",
-        name="Vendas realizadas", line=dict(color="#242424", width=3),
+        name="Vendas realizadas", line=dict(color="#182C40", width=3),
         marker=dict(size=6)
     ))
     if months and simulations is not None:
@@ -60,13 +60,13 @@ def forecast_figure(realized, months, operational, official, simulations, close,
                     x=([past_x[-1]] if last is not None else []) + future_x,
                     y=([last] if last is not None else []) + off.tolist(),
                     mode="lines+markers", name="Previsão Oficial",
-                    line=dict(color="#c45a35", width=2, dash="dash")
+                    line=dict(color="#BB4E46", width=2, dash="dash")
                 ))
         fig.add_trace(go.Scatter(
             x=([past_x[-1]] if last is not None else []) + future_x,
             y=([last] if last is not None else []) + operational.tolist(),
             mode="lines+markers", name="Previsão operacional",
-            line=dict(color="#2168b7", width=3)
+            line=dict(color="#246A8C", width=3)
         ))
     if past_x and critical_count > 0 and future_x:
         fig.add_vrect(
@@ -110,16 +110,16 @@ def stock_flow_figure(res, period_label, coverage_limit=180):
                         "Cobertura projetada · P50 (dias)")
     )
     fig.add_trace(go.Scatter(x=x, y=p50_stock, mode="lines+markers",
-                             name="Estoque P50", line=dict(color="#323b50", width=3)), row=1, col=1)
+                             name="Estoque P50", line=dict(color="#182C40", width=3)), row=1, col=1)
     fig.add_trace(go.Bar(x=x, y=production, name="Produção planejada",
-                         marker_color="#3b9a87"), row=2, col=1)
+                         marker_color="#2D8176"), row=2, col=1)
     fig.add_trace(go.Bar(x=x, y=center, name="Vendas previstas",
-                         marker_color="#4e80c5"), row=2, col=1)
+                         marker_color="#5D91AC"), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=p50_cover, mode="lines+markers",
-                             name="Cobertura P50", line=dict(color="#ad642d", width=3),
+                             name="Cobertura P50", line=dict(color="#AF7B31", width=3),
                              connectgaps=False), row=3, col=1)
     fig.add_hline(y=coverage_limit, row=3, col=1, line_dash="dash",
-                  line_color="#ad352e", annotation_text=str(coverage_limit)+" dias")
+                  line_color="#BB4E46", annotation_text=str(coverage_limit)+" dias")
     fig.update_layout(
         template="plotly_white", height=710, barmode="group", hovermode="x unified",
         margin=dict(l=25, r=15, t=52, b=35), paper_bgcolor="white",
@@ -157,21 +157,21 @@ def decision_timeline_figure(res, close, period_label, lots,
                     text=kind[0]+" "+str(round(value*100))+"%",
                     hover=f"{kind}: {value*100:.1f}% ("+
                           ("alerta" if severe else "aviso")+")",
-                    color=("#b42318" if kind=="Excesso" else "#d18a22")
-                          if severe else "#c6a39e",
+                    color=("#BB4E46" if kind=="Excesso" else "#AF7B31")
+                          if severe else "#CB9A92",
                     size=18 if severe else 13
                 ))
     for lot in lots:
         delivery = lot["month"]
         points.append(dict(x=period_label(delivery), y="Produção planejada",
                            text="", hover=f"Lote: {lot['units']:,.0f} un.",
-                           color="#318d79", size=16))
+                           color="#2D8176", size=16))
         deadline = lot["deadline"]
         if deadline >= close:
             points.append(dict(x=period_label(deadline), y="Prazo teórico do lote",
                                text="", hover=f"Prazo teórico para {period_label(delivery)}"+
                                (" (mês-limite: confirmar data)" if deadline == close else ""),
-                               color="#515c93", size=15))
+                               color="#718AA4", size=15))
     fig = go.Figure()
     if points:
         fig.add_trace(go.Scatter(
@@ -217,7 +217,7 @@ def tradeoff_figure(candidates, selected):
             text=[name] if chosen or name == "Manter plano" else [""],
             textposition="top center", name=name,
             marker=dict(size=20 if chosen else 12,
-                        color="#18714d" if valid else "#b73b2b",
+                        color="#2D8176" if valid else "#BB4E46",
                         symbol="diamond" if chosen else "circle",
                         line=dict(color="#333" if chosen else "white",
                                   width=2 if chosen else 1)),
@@ -225,8 +225,8 @@ def tradeoff_figure(candidates, selected):
                           "<br>Vendas perdidas adicionais: %{y:,.0f} un.<extra></extra>",
             showlegend=False
         ))
-    fig.add_hline(y=0, line_color="#9b9b9b", line_dash="dot")
-    fig.add_vline(x=0, line_color="#9b9b9b", line_dash="dot")
+    fig.add_hline(y=0, line_color="#8195A6", line_dash="dot")
+    fig.add_vline(x=0, line_color="#8195A6", line_dash="dot")
     fig.update_layout(
         template="plotly_white", height=335,
         margin=dict(l=15, r=15, t=15, b=15),
