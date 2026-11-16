@@ -107,6 +107,8 @@ def navigate(page, product=None):
 def approve_model(product, new_model, close):
     old = st.session_state.get("operational_" + product, MODEL[product])
     st.session_state["operational_" + product] = new_model
+    if new_model != old:
+        st.session_state.pop("active_journey", None)
     scope = st.session_state.get("active_model_scope")
     if scope is not None:
         st.session_state.setdefault("approved_models_by_close", {})[(*scope, product)] = new_model
@@ -119,7 +121,7 @@ def approve_model(product, new_model, close):
 
 def model_review_table(rankings, errors, close):
     """Resumo dinâmico dos SKUs: backtest histórico versus modelo em uso."""
-    st.markdown("#### 1 · Avaliação e seleção dos modelos de previsão")
+    st.markdown("#### Comparação dos modelos por MAPE")
     st.caption(
         "Recalculado para o fechamento " + label(close) +
         ". O modelo com menor MAPE elegível é uma sugestão baseada no histórico; "
@@ -156,10 +158,10 @@ def model_review_table(rankings, errors, close):
         f"{len(rows)} produto(s) analisado(s) · {attention} sugestão(ões) de revisão · "
         "Todos os indicadores seguintes utilizam exclusivamente o modelo em uso."
     )
-    with st.expander("Ver métricas completas e aprovar mudanças de modelo", expanded=False):
+    with st.expander("Ver MAE, RMSE, viés e pares históricos", expanded=False):
         if st.session_state.get("review_model_product") not in MODEL:
             st.session_state["review_model_product"] = next(iter(MODEL))
-        target = st.selectbox("Produto para revisar", list(MODEL), key="review_model_product")
+        target = st.selectbox("Produto para consultar as métricas", list(MODEL), key="review_model_product")
         detail, rank, winner = rankings.get(target, (pd.DataFrame(), pd.DataFrame(), None))
         current = st.session_state["operational_" + target]
         if rank.empty:
@@ -172,22 +174,6 @@ def model_review_table(rankings, errors, close):
                 "comparáveis, com horizontes de 1 a 3 meses e sem usar vendas futuras "
                 "desconhecidas no fechamento analisado."
             )
-            if winner is not None and winner != current:
-                st.warning(
-                    f"Melhor MAPE elegível: {winner}. Modelo em uso: {current}. "
-                    "Uma mudança exige revisão do planejador."
-                )
-                st.button("Aprovar uso de " + winner, type="primary",
-                          key="approve_from_review_" + target,
-                          on_click=approve_model, args=(target, winner, close))
-            elif winner is not None:
-                st.success("Modelo em uso coincide com o vencedor histórico elegível: " + current + ".")
-            else:
-                st.info("Não há modelo elegível suficiente para indicar mudança automática.")
-            if current != MODEL[target]:
-                st.button("Restaurar modelo inicial (" + MODEL[target] + ")",
-                          key="restore_from_review_" + target,
-                          on_click=approve_model, args=(target, MODEL[target], close))
         st.caption(
             "A comparação reduzida cobre MEA-P, MEA, Oficial e Naive, "
             "quando aplicáveis. É exploratória e ainda requer homologação "
@@ -207,7 +193,7 @@ def update_uploaded_file(uploaded):
         st.session_state["data_digest"] = digest
         st.session_state["uploaded_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         st.session_state.pop("selected_revision", None)
-        for key in ("validation_asof","validation_product","validation_model","validation_origins","validation_horizon"):
+        for key in ("validation_asof","validation_product","validation_model","validation_origins","validation_horizon","active_journey","journey_choice_scope"):
             st.session_state.pop(key, None)
 
 
@@ -483,24 +469,19 @@ if not revisions:
 
 st.markdown('<p class="sl-kicker">CENTRAL DE DECISÕES DE ABASTECIMENTO · FECHAMENTO MENSAL</p>',
             unsafe_allow_html=True)
-st.title("Central de decisões")
-st.caption("Seis etapas visuais: dados → modelos → previsão → simulação → riscos → decisão. Sem abas.")
-filter_a, filter_b, filter_c, filter_d = st.columns([1.05,1.05,.9,1.1])
+st.title("Smart Launch")
+st.caption("Compare os dados e modelos; depois escolha o produto e modelo para continuar.")
+filter_a,filter_b=st.columns([1.5,1])
 with filter_a:
-    st.selectbox("PRODUTO", list(MODEL), key="selected_product")
-with filter_b:
     if st.session_state.get("selected_revision") not in revisions:
         st.session_state["selected_revision"] = revisions[-1]
     st.selectbox("FECHAMENTO · REVISÃO DO PLANO", revisions,
-                 index=len(revisions)-1, format_func=label, key="selected_revision")
-with filter_c:
-    st.selectbox("HORIZONTE", ["3 meses","6 meses","Todos"], index=1, key="executive_horizon")
-with filter_d:
-    st.selectbox("VISÃO", ["Executivo","Planejador","Analista"],
-                 index=0, key="executive_mode")
-review = st.session_state["selected_revision"]
-close = review - 1
-chosen = st.session_state["selected_product"]
+                 index=len(revisions)-1,format_func=label,key="selected_revision")
+with filter_b:
+    st.selectbox("HORIZONTE DOS GRÁFICOS", ["3 meses","6 meses","Todos"],
+                 index=1,key="executive_horizon")
+review=st.session_state["selected_revision"]
+close=review-1
 scope = (st.session_state["data_digest"], str(review))
 if scope != st.session_state.get("active_model_scope"):
     approved = st.session_state.setdefault("approved_models_by_close", {})
@@ -509,6 +490,8 @@ if scope != st.session_state.get("active_model_scope"):
             (*scope, product), MODEL[product]
         )
     st.session_state["active_model_scope"] = scope
+    st.session_state.pop("active_journey",None)
+    st.session_state.pop("journey_choice_scope",None)
 # Garante inicialização também quando a lista de produtos mudar durante a sessão.
 for product in MODEL:
     st.session_state.setdefault(
@@ -518,40 +501,16 @@ for product in MODEL:
 method = st.session_state.get("simulation_method", DEFAULT_METHOD)
 persistent = bool(st.session_state.get("simulation_persistent",False))
 
-results = {}
 errors = {}
 rankings = {}
-# 1) Avaliar modelos para TODOS os produtos antes de exibir ou simular os riscos.
+# Todos os candidatos são testados ANTES da escolha de produto e modelo.
 for product in MODEL:
     try:
-        _detail, _rank, _winner = evaluate_models(product, close, blocks, forecast, known)
-        rankings[product] = (_detail, _rank, _winner)
+        _detail,_rank,_winner=evaluate_models(product,close,blocks,forecast,known)
+        rankings[product]=(_detail,_rank,_winner)
     except Exception as exc:
-        rankings[product] = (pd.DataFrame(), pd.DataFrame(), None)
-        errors["rank_" + product] = str(exc)
-
-# 2) Usar somente o modelo operacional aprovado/retido no fechamento.
-for product in MODEL:
-    try:
-        results[product] = simulate(product, close, blocks, base, method, persistent,
-                                    operational_model=st.session_state["operational_" + product])
-    except Exception as exc:
-        results[product] = None
-        errors[product] = str(exc)
-
-ready_count = sum(x is not None for x in results.values())
-status = "Processamento completo" if ready_count==len(MODEL) else "Processamento parcial"
-file_name = st.session_state.get("triangulo_file_name","Triângulo carregado na sessão")
-with st.sidebar:
-    st.caption("Fechamento: " + label(close) + " · Revisão: " + label(review))
-    st.caption(status + " · " + file_name)
-    if ready_count < len(MODEL):
-        with st.expander("Diagnóstico de simulações indisponíveis"):
-            st.warning("Não calculado não significa risco zero.")
-            for product in MODEL:
-                if results[product] is None:
-                    st.write("**" + product + ":** " + errors.get(product, "Dados insuficientes"))
-            st.caption("As vendas do mês m são recuperadas na revisão m+1. Pelo menos dois erros históricos são necessários para simular.")
+        rankings[product]=(pd.DataFrame(),pd.DataFrame(),None)
+        errors["rank_"+product]=str(exc)
 
 # Jornada executiva: seis etapas metodológicas, todas na mesma página.
 # Todos os números são derivados de "results", "rankings" e das funções compartilhadas.
@@ -574,9 +533,8 @@ def journey_head(number, title, description):
     )
 
 st.markdown("## Da planilha à decisão")
-st.caption("O mesmo fluxo do motor Python, em seis etapas. Fechamento " + label(close) +
-           " · produto em foco " + chosen +
-           ". Dados e probabilidades são calculados, não exemplos ilustrativos.")
+st.caption("Fechamento "+label(close)+" · revisão "+label(review)+
+           ". Os resultados usam dados enviados, não exemplos ilustrativos.")
 
 # 01 — Dados: mostrar sempre toda a carteira e o histórico disponível.
 journey_head("01", "Dados e diagnóstico",
@@ -598,21 +556,26 @@ for p, source in SHEETS.items():
         "Estoque inicial (un.)": round(initial_stock) if np.isfinite(initial_stock) else np.nan,
         "Próximo lote (un.)": round(initial_plan) if np.isfinite(initial_plan) else np.nan,
         "Lead time (semanas)": lt_weeks,
-        "Simulação": "Disponível" if results[p] is not None else "Indisponível"
+        "Análise": "Aguardando escolha do modelo"
     })
 st.dataframe(pd.DataFrame(audit_rows), hide_index=True, use_container_width=True,key="journey_audit")
-observed = known(blocks[SHEETS[chosen]]["PV"], close)
-if not observed.empty:
-    history = go.Figure()
-    history.add_trace(go.Scatter(
-        x=[label(m) for m in observed.index], y=observed.values,
-        mode="lines+markers", name="Vendas realizadas",
-        line=dict(color="#3c596b",width=2), marker=dict(size=5)
-    ))
-    history.update_layout(template="plotly_white",height=220,
-                          margin=dict(l=10,r=12,t=15,b=5),
-                          yaxis_title="Unidades",xaxis_title=None)
+# Antes da escolha, o histórico mostra todos os SKUs presentes no arquivo.
+history = go.Figure()
+colors = ["#246A8C","#2D8176","#AF7B31","#75879B","#8268A2","#BB4E46"]
+for n,(p,source) in enumerate(SHEETS.items()):
+    observed_p=known(blocks[source]["PV"],close)
+    if not observed_p.empty:
+        history.add_trace(go.Scatter(
+            x=[label(m) for m in observed_p.index],y=observed_p.values,
+            mode="lines+markers",name=p,
+            line=dict(color=colors[n % len(colors)],width=2),marker=dict(size=4)))
+if history.data:
+    history.update_layout(template="plotly_white",height=245,
+        margin=dict(l=8,r=8,t=12,b=8),yaxis_title="Vendas realizadas (un.)",
+        legend=dict(orientation="h",y=1.22),paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",font=dict(color="#182C40"))
     st.plotly_chart(history,use_container_width=True,key="journey_data_history")
+
 st.caption("O realizado de cada mês é recuperado da revisão seguinte; nenhum dado posterior "
            "ao fechamento entra na previsão daquele momento.")
 
