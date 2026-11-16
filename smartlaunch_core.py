@@ -99,8 +99,37 @@ def read_base(wb):
             if result:return result
     raise ValueError("Não foi possível encontrar LT e cobertura por produto na aba Base.")
 
+def discover_products(wb):
+    """Descobre todos os SKUs pelo nome das abas; mantém as escolhas históricas P1–P3."""
+    discovered = {}
+    for sheet in wb.sheetnames:
+        match = re.fullmatch(r"PRODUTO\\s+(\\d+)", sheet.strip(), flags=re.IGNORECASE)
+        if match:
+            product = "P" + str(int(match.group(1)))
+            discovered[product] = sheet
+    if not discovered:
+        raise ValueError("Nenhuma aba PRODUTO N encontrada na planilha.")
+    ordered = sorted(discovered, key=lambda p: int(p[1:]))
+    new_analog = {}
+    for product in ordered:
+        suffix = product[1:]
+        new_analog[product] = sorted(
+            name for name in wb.sheetnames
+            if re.fullmatch(r"BENCH\\s+.+_" + re.escape(suffix), name.strip(), flags=re.IGNORECASE)
+        )
+    previous_models = dict(MODEL)
+    SHEETS.clear()
+    SHEETS.update({p: discovered[p] for p in ordered})
+    ANALOG.clear()
+    ANALOG.update(new_analog)
+    MODEL.clear()
+    MODEL.update({p: previous_models.get(p, "MEA" if new_analog[p] else "Oficial")
+                  for p in ordered})
+
+
 def load_data(content):
     wb=openpyxl.load_workbook(io.BytesIO(content),read_only=True,data_only=True)
+    discover_products(wb)
     missing=[s for s in list(SHEETS.values())+sorted(set(sum(ANALOG.values(),[]))) if s not in wb.sheetnames]
     if missing:raise ValueError("A planilha não é o Triangulo_Produtos_V2.xlsx do TCC final. Abas ausentes: "+", ".join(missing)+". Não use a Base de Dados - PUC (2).xlsx antiga (A–P).")
     base=read_base(wb)
