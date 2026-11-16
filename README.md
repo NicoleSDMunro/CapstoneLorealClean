@@ -1,3 +1,20 @@
+# Navegação em seis etapas — 16/11/2026
+
+A página principal do Streamlit agora percorre sequencialmente o mesmo fluxo do motor Python, **sem novas abas**:
+
+1. **Dados e diagnóstico:** tabela por SKU, estoque no fechamento, plano do próximo lote, lead time e histórico conhecido naquela data.
+2. **Avaliação e seleção dos modelos:** comparação MAPE com os mesmos pares origem/alvo, justificativa, modelo em uso e aprovação humana.
+3. **Previsão mensal:** curvas de vendas realizadas, previsão operacional e Oficial, tabela por mês e cenários P10–P90.
+4. **Incerteza e evolução do estoque:** 1.000 trajetórias (quando há pelo menos dois erros de arranque), projeção de produção, estoque e cobertura.
+5. **Risco de excesso e prazo:** gráficos e tabela de excesso/ruptura por mês, janela crítica e prazo aproximado de fornecedores.
+6. **Alternativas e decisão:** seleciona lote positivo elegível, mês-alvo e alternativa; compara excesso evitado em unidades, vendas perdidas adicionais, fill rate e trade-off.
+
+**Como usar:** carregar o Triângulo na barra lateral, selecionar produto/fechamento, ler as seis etapas de cima para baixo e, caso necessário, abrir análises detalhadas ou painel executivo completo. A ausência de simulação é exibida como indisponível; jamais como risco zero. Na etapa 6, as alternativas respeitam o filtro *teórico* do lead time, mas **não são alterações executadas, economias realizadas nem autorização de cancelar pedidos**. O ganho em unidades é contrafactual.
+
+**Arquitetura:** smartlaunch_ui.py apresenta os seis passos usando resultados existentes de smartlaunch_core.py, smartlaunch_monthly.py, smartlaunch_impact.py, smartlaunch_supply.py e smartlaunch_visuals.py. Não foi criado motor de cálculo duplicado.
+
+---
+
 # Integração do ZIP ajustado — 15/11/2026
 
 A atualização incorpora ao aplicativo atual as melhorias operacionais presentes em `CapstoneLorealClean_ajustado (1).zip`, **mantendo a experiência de três áreas e as funcionalidades já existentes**. A integração foi feita sobre a branch principal atual, não por substituição cega de arquivos.
