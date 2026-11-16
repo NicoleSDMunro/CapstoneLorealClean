@@ -25,6 +25,13 @@ assert len(views) == 1, "Subnavegação de produto não encontrada"
 views[0].set_value("Riscos por mês").run()
 assert not at.exception, [str(e) for e in at.exception]
 
+views = [radio for radio in at.radio if radio.label == "O que deseja avaliar?"]
+views[0].set_value("Previsão × Oficial").run()
+assert not at.exception, [str(e) for e in at.exception]
+views = [radio for radio in at.radio if radio.label == "O que deseja avaliar?"]
+views[0].set_value("Decisão e alternativas").run()
+assert not at.exception, [str(e) for e in at.exception]
+
 nav = next(r for r in at.radio if r.label == "Navegação")
 nav.set_value("Resultados e confiabilidade").run()
 assert not at.exception, [str(e) for e in at.exception]

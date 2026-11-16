@@ -15,6 +15,8 @@ from smartlaunch_core import (
     nivel, chance_txt,
 )
 from smartlaunch_monthly import evaluate_models
+from smartlaunch_visuals import (forecast_figure, stock_flow_figure,
+                                 decision_timeline_figure, tradeoff_figure)
 from smartlaunch_priority import card_summary
 from smartlaunch_metrics import (current_alert_opportunities, compare_verified_excess,
                                  format_opportunity_months)
@@ -641,6 +643,26 @@ if page == "Visão geral":
                 ", ".join(item["product"] for item in snapshots if not item["valid"]) +
                 ". Não atribuímos chance zero a esses produtos.")
 
+    st.subheader("Quando ainda é possível agir?")
+    st.caption("Linha do tempo do produto selecionado na barra lateral · "
+               "riscos, lotes positivos registrados e prazos estimados por lead time. "
+               "Prazo aberto não confirma autorização do fornecedor.")
+    if results.get(chosen) is not None:
+        timeline_res = results[chosen]
+        st.plotly_chart(
+            decision_timeline_figure(
+                timeline_res, close, label, future_lots(timeline_res, close),
+                alert_threshold=LIMIT_ALERT, warn_threshold=LIMIT_WARN,
+                coverage_limit=LIM
+            ), use_container_width=True
+        )
+        st.caption("E = excesso · R = ruptura. Pontos de risco representam chances "
+                   "simuladas; produção e prazos vêm do Triângulo. "
+                   "Lotes após o primeiro risco não eliminam estoque ou faltas anteriores.")
+    else:
+        st.info("Linha do tempo indisponível para o produto selecionado: "
+                "é necessário calcular a simulação.")
+
     st.subheader("Levar prioridades para a reunião")
     decisions=[]
     for item in snapshots:
@@ -749,24 +771,25 @@ elif page == "Previsão e modelos":
                       args=(product,MODEL[product],close))
     res=results[product]
     if res is not None:
-        chart=go.Figure()
-        if len(res["months"]):
-            chart.add_trace(go.Scatter(x=[label(m) for m in res["months"]],
-                y=res["center"],mode="lines+markers",
-                name="Previsão operacional",line=dict(color="#111",width=3)))
-            pv=blocks[SHEETS[product]]["PV"]
-            try:
-                official=forecast(product,res["months"],close,blocks,model="Oficial")
-                chart.add_trace(go.Scatter(x=[label(m) for m in res["months"]],
-                    y=official,mode="lines+markers",name="Plano Oficial",
-                    line=dict(color="#c73b22",dash="dash")))
-            except Exception:
-                pass
-        chart.update_layout(template="plotly_white",height=335,
-                            xaxis_title="Mês projetado",yaxis_title="Unidades",
-                            margin=dict(l=10,r=10,t=12,b=10))
-        st.plotly_chart(chart,use_container_width=True)
-        st.caption("O gráfico usa a previsão recalculada no fechamento selecionado.")
+        st.subheader("Vendas realizadas × previsão Oficial × Smart Launch")
+        realized=known(blocks[SHEETS[product]]["PV"],close)
+        try:
+            official=forecast(product,res["months"],close,blocks,model="Oficial")
+        except (ValueError,KeyError,IndexError,TypeError):
+            official=None
+        st.plotly_chart(
+            forecast_figure(
+                realized, res["months"], res["center"], official, res["dm"],
+                close, label, critical_count=res["window"]
+            ), use_container_width=True
+        )
+        if official is None:
+            st.info("Previsão Oficial indisponível nesta revisão; "
+                    "somente a previsão operacional pôde ser exibida.")
+        st.caption("Histórico realizado conhecido no fechamento, sem usar vendas posteriores. "
+                   "Faixa P10–P90 = percentis das mesmas trajetórias simuladas para demanda; "
+                   "não é intervalo estatístico calibrado. "
+                   "A área sombreada indica a janela crítica estimada pelo lead time.")
     if not detail.empty:
         with st.expander("Inspecionar cada erro de validação"):
             st.dataframe(detail,hide_index=True,use_container_width=True)
@@ -789,6 +812,15 @@ elif page == "Riscos de estoque":
     c1.metric("Estoque inicial",fmt(res["e0"])+" un.")
     c2.metric("Desvio-padrão dos erros",fmt(res["sd"])+" un.")
     c3.metric("Erros usados",len(res["errors"]))
+    st.subheader("Estoque, produção e cobertura — mês a mês")
+    st.caption("Estoque e cobertura = medianas das trajetórias simuladas. "
+               "Produção = plano carregado; vendas = previsão central. "
+               "Fluxos mensais e saldo de estoque são mostrados em painéis separados.")
+    st.plotly_chart(stock_flow_figure(res,label,coverage_limit=LIM),
+                    use_container_width=True)
+    st.caption("Cobertura ≥ 180 dias é a referência de excesso. "
+               "Mês sem cobertura futura suficiente aparece sem ponto, "
+               "e não como risco zero.")
     ex_col,ru_col=st.columns(2)
     with ex_col:
         with st.container(border=True):
@@ -1051,10 +1083,28 @@ elif page == "Impacto operacional":
                     "passo que viola o limite; não equivale a uma recomendação "
                     "economicamente ótima nem confirma viabilidade contratual."
                 )
-        chosen_option=st.selectbox(
-            "Alternativa a comparar",candidates["Alternativa"].tolist(),
-            index=0,key="impact_action"
+        st.markdown("#### Escolha visualmente o ajuste do lote")
+        cut_options = [0,5,10,15,25,50,100]
+        cut_choice = st.select_slider(
+            "Redução / cancelamento do lote (%)",
+            options=cut_options, value=0, key="impact_cut_pct",
+            help="A grade usa as mesmas alternativas simuladas pelo motor do TCC. "
+                 "100% corresponde a cancelar o lote, não a uma ação autorizada."
         )
+        reduction_name = ("Manter plano" if cut_choice == 0 else
+                          "Cancelar lote" if cut_choice == 100 else
+                          f"Reduzir {cut_choice}%")
+        other_options=[name for name in candidates["Alternativa"]
+                       if str(name).startswith("Aumentar ")]
+        if other_options:
+            with st.expander("Outras alternativas (aumento de lote)"):
+                use_increase=st.checkbox("Comparar um aumento de produção",
+                                         key="impact_compare_increase")
+                increase_choice=st.selectbox("Aumento a comparar",other_options,
+                                             key="impact_increase_choice")
+            chosen_option=increase_choice if use_increase else reduction_name
+        else:
+            chosen_option=reduction_name
         selected=candidates[candidates["Alternativa"]==chosen_option].iloc[0]
         if not bool(selected["Dentro do critério do TCC"]):
             st.warning("Esta alternativa viola o critério de proteção do serviço: "
@@ -1079,6 +1129,12 @@ elif page == "Impacto operacional":
             "A mesma sacola de "+str(len(res["dm"]))+" trajetórias de demanda é reutilizada "
             "em todas as alternativas. A previsão e as probabilidades não são dados reais futuros."
         )
+        st.markdown("#### O equilíbrio entre reduzir excesso e preservar atendimento")
+        st.plotly_chart(tradeoff_figure(candidates,chosen_option),
+                        use_container_width=True)
+        st.caption("Cada ponto é uma alternativa calculada, sem valores ilustrativos. "
+                   "Verde = dentro do critério simulado do TCC; vermelho = fora do critério. "
+                   "O losango mostra a seleção. Nenhum ponto significa corte aprovado.")
         with st.expander("Detalhes da análise: fronteira entre excesso e vendas perdidas"):
             min_fill=st.slider(
                 "Meta mínima de fill rate para exploração (%)",

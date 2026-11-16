@@ -16,7 +16,7 @@ jobs:
       - name: Install application dependencies
         run: pip install -r requirements.txt
       - name: Validate Python syntax
-        run: python -m compileall -q app.py smartlaunch_ui.py smartlaunch_core.py smartlaunch_priority.py smartlaunch_impact.py smartlaunch_monthly.py smartlaunch_validation.py
+        run: python -m compileall -q app.py smartlaunch_ui.py smartlaunch_core.py smartlaunch_priority.py smartlaunch_impact.py smartlaunch_monthly.py smartlaunch_validation.py smartlaunch_visuals.py
       - name: Test synthetic data
         run: PYTHONPATH=. python tests/test_smoke.py
       - name: Test operational impact
@@ -25,5 +25,7 @@ jobs:
         run: PYTHONPATH=. python tests/test_supply.py
       - name: Test alert opportunity and official comparison
         run: PYTHONPATH=. python tests/test_metrics.py
+      - name: Test new decision charts
+        run: PYTHONPATH=. python tests/test_visuals.py
       - name: Test consultant UX
         run: PYTHONPATH=. python tests/test_ui.py
