@@ -410,10 +410,10 @@ for product, sheet in SHEETS.items():
     data = blocks[sheet]
     revs = set(data["PV"].index)&set(data["PROD"].index)&set(data["EST"].index)
     valid = {rev for rev in revs if rev-1 in data["EST"].columns}
-    revisions = valid if revisions is None else revisions & valid
+    revisions = valid if revisions is None else revisions | valid
 revisions = sorted(revisions or [])
 if not revisions:
-    st.error("Nenhuma revisão comum entre PV, produção e estoque dos produtos carregados. Confira a auditoria da base; não foram gerados alertas.")
+    st.error("Nenhuma revisão válida entre PV, produção e estoque dos produtos carregados. Confira a auditoria da base; não foram gerados alertas.")
     st.stop()
 
 with st.sidebar:
