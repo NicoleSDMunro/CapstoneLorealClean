@@ -16,17 +16,17 @@ assert not at.exception, [str(e) for e in at.exception]
 assert any("Central de decisões" in str(t.value) for t in at.title)
 
 # Executive cockpit: desktop filters, six-SKU workbook and deeper analysis.
-for label_name in ("PRODUCT", "CLOSING · PLAN REVISION", "HORIZON", "VIEW"):
+for label_name in ("PRODUTO", "FECHAMENTO · REVISÃO DO PLANO", "HORIZONTE", "VISÃO"):
     assert any(item.label == label_name for item in at.selectbox), label_name
 at.session_state["triangulo_file_bytes"] = samples["buf_multi"].getvalue()
 at.run()
 assert not at.exception, [str(e) for e in at.exception]
-product_filter=next(x for x in at.selectbox if x.label == "PRODUCT")
+product_filter=next(x for x in at.selectbox if x.label == "PRODUTO")
 assert "P6" in product_filter.options, product_filter.options
 product_filter.set_value("P4").run()
 assert not at.exception, [str(e) for e in at.exception]
-mode_filter=next(x for x in at.selectbox if x.label == "VIEW")
-mode_filter.set_value("Analyst").run()
+mode_filter=next(x for x in at.selectbox if x.label == "VISÃO")
+mode_filter.set_value("Analista").run()
 assert not at.exception, [str(e) for e in at.exception]
 
 nav = next(r for r in at.radio if r.label == "Navegação")
