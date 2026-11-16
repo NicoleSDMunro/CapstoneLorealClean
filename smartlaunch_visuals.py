@@ -47,9 +47,9 @@ def forecast_figure(realized, months, operational, official, simulations, close,
                 fillcolor="rgba(35,104,183,0.13)", line=dict(width=0),
                 name=f"Faixa simulada P{low_pct:g}–P{high_pct:g} (não calibrada)",
                 customdata=np.column_stack((lo, hi)),
-                hovertemplate=("%{x}<br>Simulated lower: %{customdata[0]:,.0f} un."+
-                               "<br>Simulated upper: %{customdata[1]:,.0f} un."+
-                               "<extra>Range, not calibrated</extra>")
+                hovertemplate=("%{x}<br>Limite inferior simulado: %{customdata[0]:,.0f} un."+
+                               "<br>Limite superior simulado: %{customdata[1]:,.0f} un."+
+                               "<extra>Faixa simulada, não calibrada</extra>")
             ))
     last = float(historical.iloc[-1]) if len(historical) and historical.index[-1] == close else None
     if months:
@@ -65,7 +65,7 @@ def forecast_figure(realized, months, operational, official, simulations, close,
         fig.add_trace(go.Scatter(
             x=([past_x[-1]] if last is not None else []) + future_x,
             y=([last] if last is not None else []) + operational.tolist(),
-            mode="lines+markers", name="Previsão em uso",
+            mode="lines+markers", name="Previsão operacional",
             line=dict(color="#2168b7", width=3)
         ))
     if past_x and critical_count > 0 and future_x:
