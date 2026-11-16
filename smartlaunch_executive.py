@@ -23,62 +23,36 @@ from smartlaunch_visuals import forecast_figure
 
 EXECUTIVE_CSS = """
 <style>
-/* Desktop layout: real dashboard width rather than a narrow article. */
-@media(min-width: 1024px){
-  .block-container{max-width:1840px!important;padding-top:1.05rem!important;
-      padding-left:2.2rem!important;padding-right:2.2rem!important;}
-}
-.stApp{background:#F4F7FB!important;color:#102A43;}
-[data-testid="stSidebar"]{background:#102A43!important;border-right:1px solid #24455f!important;}
-[data-testid="stSidebar"] *{color:#e8f0fb;}
-[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p{color:#dce7f7;}
-[data-testid="stSidebar"] .stRadio label{color:#e8f0fb;}
-[data-testid="stSidebar"] div[data-baseweb="select"] *{color:#102A43;}
-[data-testid="stHeader"]{background:#F4F7FB!important;}
-h1{font-size:2rem!important;letter-spacing:-.035em!important;margin-bottom:.2rem!important;}
-h2,h3{letter-spacing:-.03em!important;color:#102A43!important;}
-[data-testid="stMetric"]{background:#fff;border:1px solid #e2e9f3;
-  border-radius:12px!important;padding:10px 16px!important;min-height:102px;
-  box-shadow:none!important;}
-[data-testid="stMetricLabel"]{color:#536881!important;font-size:.82rem!important;}
-[data-testid="stMetricValue"]{font-size:1.72rem!important;font-weight:760!important;
-  color:#102A43!important;line-height:1.1!important;}
-[data-testid="stMetricDelta"]{font-size:.75rem!important;}
-[data-testid="stVerticalBlockBorderWrapper"]>div{border:1px solid #e2e9f3!important;
-  border-radius:13px!important;box-shadow:none!important;}
-[data-testid="stPlotlyChart"]{border:0!important;}
-.stButton button{border-radius:8px!important;min-height:37px!important;}
-.stButton button[kind="primary"]{background:#2563EB!important;border-color:#2563EB!important;}
-.sl-kicker{font-size:11px;font-weight:800;letter-spacing:.11em;color:#4f6a88;margin:0;}
+/* Só os componentes específicos do painel executivo: a identidade global
+   pertence a smartlaunch_ui.py para que não surjam dois temas concorrentes. */
 .sl-reco{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(210px,.7fr);
-  gap:18px;align-items:center;background:#102A43;color:white;padding:17px 22px;
-  border-radius:13px;margin:7px 0 8px;}
-.sl-reco .sl-tag{font-size:10px;letter-spacing:.11em;font-weight:800;color:#a6cafa;}
-.sl-reco h2{color:white!important;margin:5px 0!important;font-weight:790!important;
-  font-size:1.38rem!important;line-height:1.2;}
-.sl-reco p{font-size:.87rem;line-height:1.5;color:#dce9f7;margin:5px 0;}
-.sl-reco .sl-response{border-left:1px solid #50718a;padding-left:19px;}
+ gap:18px;align-items:center;background:#182C40;color:#fff;padding:19px 22px;
+ border-radius:13px;margin:8px 0 12px;}
+.sl-reco .sl-tag{font-size:10px;letter-spacing:.11em;font-weight:800;color:#B9D7E7;}
+.sl-reco h2{color:#fff!important;margin:5px 0!important;font-weight:780!important;
+ font-size:1.38rem!important;line-height:1.22;}
+.sl-reco p{font-size:.87rem;line-height:1.5;color:#E4EBF2;margin:5px 0;}
+.sl-reco .sl-response{border-left:1px solid #4D687D;padding-left:19px;}
 .sl-reco .sl-response h3{font-size:1.02rem!important;color:#fff!important;margin:7px 0;}
-.sl-reco .sl-response small{color:#bed0e5;font-size:.77rem;}
-.sl-process{font-size:11px;color:#5a708a;letter-spacing:.015em;padding:3px 2px 8px;}
-.sl-process b{color:#173858;font-weight:780;}
+.sl-reco .sl-response small{color:#B9CFDF;font-size:.77rem;}
+.sl-process{font-size:11px;color:#63778C;letter-spacing:.015em;padding:3px 2px 8px;}
+.sl-process b{color:#182C40;font-weight:770;}
 .sl-section{font-size:13px!important;text-transform:uppercase;letter-spacing:.07em;
-  font-weight:780!important;color:#102A43;padding-top:4px;margin:0;}
-.sl-panel{background:#fff;border:1px solid #e1e9f2;border-radius:12px;padding:9px 12px 1px;}
-.sl-panel-title{font-size:12px;font-weight:780;color:#102A43;letter-spacing:.035em;
-  padding:2px 0 0;}
-.sl-note{font-size:11px;line-height:1.5;color:#61758f;margin:2px 0 8px;}
-.sl-subline{display:flex;gap:14px;flex-wrap:wrap;color:#546b84;font-size:12px;padding:3px 1px 9px;}
-.sl-step{background:#fff;border:1px solid #e1e9f2;border-radius:12px;
-  padding:14px 17px;min-height:90px;margin:4px 0;}
-.sl-step strong{color:#102A43;}
-.sl-step small{color:#586f88;font-size:12px;line-height:1.5;}
-.sl-safe{background:#effaf3;color:#166b3e;padding:4px 8px;border-radius:6px;font-size:11px;}
-.sl-exploratory{background:#fff8e8;color:#936316;padding:4px 8px;border-radius:6px;font-size:11px;}
-@media(max-width:1050px){
-  .sl-reco{grid-template-columns:1fr;}
-  .sl-reco .sl-response{border-left:0;border-top:1px solid #50718a;padding:12px 0 0;}
-}
+ font-weight:770!important;color:#182C40;padding-top:5px;margin:0;}
+.sl-panel{background:#fff;border:1px solid #DEE6ED;border-radius:12px;
+ padding:12px 14px 3px;}
+.sl-panel-title{font-size:12px;font-weight:770;color:#182C40;letter-spacing:.035em;
+ padding:2px 0 0;}
+.sl-note{font-size:11px;line-height:1.5;color:#63778C;margin:3px 0 8px;}
+.sl-subline{display:flex;gap:14px;flex-wrap:wrap;color:#63778C;font-size:12px;padding:3px 1px 9px;}
+.sl-exec-step{background:#fff;border:1px solid #DEE6ED;border-radius:12px;
+ padding:14px 17px;min-height:90px;margin:4px 0;}
+.sl-exec-step strong{color:#182C40;}
+.sl-exec-step small{color:#63778C;font-size:12px;line-height:1.5;}
+.sl-safe{background:#EAF7F4;color:#1E665B;padding:4px 8px;border-radius:6px;font-size:11px;}
+.sl-exploratory{background:#FFF5E5;color:#855D18;padding:4px 8px;border-radius:6px;font-size:11px;}
+@media(max-width:1050px){.sl-reco{grid-template-columns:1fr;}
+ .sl-reco .sl-response{border-left:0;border-top:1px solid #4D687D;padding:12px 0 0;}}
 </style>
 """
 
@@ -110,19 +84,19 @@ def _risk_frame(res, count):
 
 def _risk_plot(frame):
     chart=go.Figure()
-    for col, color in (("Excesso","#DC2626"),("Ruptura","#F59E0B")):
+    for col, color in (("Excesso","#BB4E46"),("Ruptura","#AF7B31")):
         chart.add_trace(go.Bar(
             x=frame["Mês"],y=frame[col],name=col,
             marker_color=color,opacity=.88,
             hovertemplate="%{x}<br>"+col+": %{y:.1f}%<extra></extra>"
         ))
-    chart.add_hline(y=20,line_color="#586c85",line_dash="dash",line_width=1,
+    chart.add_hline(y=20,line_color="#63778C",line_dash="dash",line_width=1,
                     annotation_text="Alerta >20%",annotation_font_size=10)
     chart.update_layout(
         template="plotly_white",height=225,barmode="group",hovermode="x unified",
-        font=dict(color="#102A43",size=11),margin=dict(l=4,r=4,t=8,b=12),
+        font=dict(color="#182C40",size=11),margin=dict(l=4,r=4,t=8,b=12),
         paper_bgcolor="#fff",plot_bgcolor="#fff",
-        yaxis=dict(range=[0,105],title=None,ticksuffix="%",gridcolor="#eff3f8"),
+        yaxis=dict(range=[0,105],title=None,ticksuffix="%",gridcolor="#EEF2F6"),
         xaxis=dict(title=None,showgrid=False),legend=dict(orientation="h",y=1.18,x=0)
     )
     return chart
@@ -139,19 +113,19 @@ def _coverage_plot(res,count):
     chart=go.Figure()
     chart.add_trace(go.Scatter(
         x=xs,y=values,mode="lines+markers",name="Cobertura futura mediana",
-        line=dict(color="#2563EB",width=3),marker=dict(size=7),
+        line=dict(color="#246A8C",width=3),marker=dict(size=7),
         fill="tozeroy",fillcolor="rgba(37,99,235,.065)",
         hovertemplate="%{x}<br>Cobertura mediana: %{y:.0f} dias<extra></extra>"
     ))
-    chart.add_hline(y=LIM,line_color="#DC2626",line_dash="dash",line_width=1.3,
+    chart.add_hline(y=LIM,line_color="#BB4E46",line_dash="dash",line_width=1.3,
                     annotation_text=str(LIM)+" dias · limite operacional",
                     annotation_position="top left",annotation_font_size=10)
     chart.update_layout(
         template="plotly_white",height=158,margin=dict(l=5,r=8,t=3,b=13),
         hovermode="x",showlegend=False,paper_bgcolor="#fff",plot_bgcolor="#fff",
-        font=dict(color="#102A43",size=11),
+        font=dict(color="#182C40",size=11),
         xaxis=dict(title=None,showgrid=False),
-        yaxis=dict(title=None,gridcolor="#eff3f8",rangemode="tozero")
+        yaxis=dict(title=None,gridcolor="#EEF2F6",rangemode="tozero")
     )
     return chart
 
@@ -215,7 +189,7 @@ def _decision_trail(summary, res, close, count):
     for i,(stage,title,detail) in enumerate(rows):
         with (left if i%2==0 else right):
             st.markdown(
-                '<div class="sl-step"><div class="sl-kicker">'+html.escape(stage)+
+                '<div class="sl-exec-step"><div class="sl-kicker">'+html.escape(stage)+
                 '</div><strong>'+html.escape(title)+'</strong><br><small>'+
                 html.escape(detail)+'</small></div>', unsafe_allow_html=True)
 
@@ -321,11 +295,11 @@ def render_executive_dashboard(
             close,label,critical_count=min(res["window"],count),
             percentile_bounds=(2.5,97.5))
         fig.update_layout(height=231,margin=dict(l=10,r=8,t=7,b=35),
-                          font=dict(color="#102A43",size=11),
+                          font=dict(color="#182C40",size=11),
                           legend=dict(orientation="h",y=-.27,x=0,font=dict(size=10)))
         for trace in fig.data:
             if trace.name=="Previsão operacional":trace.name="Smart Launch · "+model
-            if trace.name=="Previsão Oficial":trace.line.color="#71849a"
+            if trace.name=="Previsão Oficial":trace.line.color="#8195A6"
         st.plotly_chart(fig,use_container_width=True)
     with c2:
         st.markdown('<div class="sl-panel-title">MONITOR DE RISCOS</div>',unsafe_allow_html=True)
