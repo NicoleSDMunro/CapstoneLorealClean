@@ -14,7 +14,7 @@ def _as_float(values):
 
 
 def forecast_figure(realized, months, operational, official, simulations, close, period_label,
-                    critical_count=0):
+                    critical_count=0, percentile_bounds=(10, 90)):
     """Histórico conhecido até o fechamento e duas projeções da mesma origem."""
     months = list(months)
     operational = _as_float(operational)
@@ -33,8 +33,11 @@ def forecast_figure(realized, months, operational, official, simulations, close,
     if months and simulations is not None:
         dm = _as_float(simulations)
         if dm.ndim == 2 and dm.shape[1] == len(months) and dm.shape[0] > 0:
-            lo = np.percentile(dm, 10, axis=0)
-            hi = np.percentile(dm, 90, axis=0)
+            low_pct, high_pct = percentile_bounds
+            if not 0 <= low_pct < high_pct <= 100:
+                raise ValueError("Percentis do intervalo simulado inválidos.")
+            lo = np.percentile(dm, low_pct, axis=0)
+            hi = np.percentile(dm, high_pct, axis=0)
             fig.add_trace(go.Scatter(
                 x=future_x, y=lo, mode="lines", line=dict(width=0),
                 hoverinfo="skip", showlegend=False
@@ -42,8 +45,11 @@ def forecast_figure(realized, months, operational, official, simulations, close,
             fig.add_trace(go.Scatter(
                 x=future_x, y=hi, mode="lines", fill="tonexty",
                 fillcolor="rgba(35,104,183,0.13)", line=dict(width=0),
-                name="Faixa simulada P10–P90 (não calibrada)",
-                hovertemplate="%{x}: %{y:,.0f} un.<extra>Limite superior simulado</extra>"
+                name=f"Faixa simulada P{low_pct:g}–P{high_pct:g} (não calibrada)",
+                customdata=np.column_stack((lo, hi)),
+                hovertemplate=("%{x}<br>Simulated lower: %{customdata[0]:,.0f} un."+
+                               "<br>Simulated upper: %{customdata[1]:,.0f} un."+
+                               "<extra>Range, not calibrated</extra>")
             ))
     last = float(historical.iloc[-1]) if len(historical) and historical.index[-1] == close else None
     if months:
