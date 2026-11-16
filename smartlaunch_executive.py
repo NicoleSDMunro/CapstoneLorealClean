@@ -168,9 +168,9 @@ def _headline(summary,valid):
                            "alteração; confirme a data de corte com o fornecedor antes de comparar intervenções."), "Avaliar alternativas de abastecimento"
         if risk=="excesso":
             return title, ("Risco identificado para "+first+". Não há lote relevante alterável "
-                           "dentro da janela teórica de lead time; avalie ações comerciais e mantenha o monitoramento."), "Ação comercial + monitoramento"
+                           "dentro da janela teórica de prazo de fornecimento; avalie ações comerciais e mantenha o monitoramento."), "Ação comercial + monitoramento"
         return title, ("Risco identificado para "+first+". Não há lote relevante alterável "
-                       "antes do evento; avalie a realocação e eventuais exceções com Supply Chain."), "Rever alocação e exceções"
+                       "antes do evento; avalie a realocação e eventuais exceções com cadeia de suprimentos."), "Rever alocação e exceções"
     if summary.get("warning"):
         return "Aviso antecipado — acompanhar",("Aviso baseado no modelo para "+
                 label(summary["warning_month"])+". Reavalie no próximo fechamento."),"Acompanhar próximo fechamento"
@@ -194,7 +194,7 @@ def _decision_trail(summary, res, close, count):
             ("01 / RISCO", summary["type"]+" · "+_percent(100*peak), "Probabilidade condicional simulada, sem calibração comprovada."),
             ("02 / MOMENTO", first,"Primeiro alerta acima do limiar na janela crítica."),
             ("03 / POSSIBILIDADE DE AÇÃO", assessment,
-             str(lead)+" mês(es) de lead time arredondado; mês-limite teórico "+deadline+". Confirmação do fornecedor necessária."),
+             str(lead)+" mês(es) de prazo de fornecimento arredondado; mês-limite teórico "+deadline+". Confirmação do fornecedor necessária."),
             ("04 / ALTERNATIVAS", "Avaliar medidas de abastecimento e comerciais",
              "Compare intervenções apenas quando houver lotes relevantes ainda dentro da janela teórica."),
             ("05 / EQUILÍBRIO ENTRE RISCOS", "Excesso evitado versus vendas perdidas",
@@ -250,7 +250,7 @@ def render_executive_dashboard(
                            else "Nenhum prazo de lote relevante")
         st.markdown('<div class="sl-subline"><span><b>'+html.escape(supplier_window)+
                     '</b></span><span>'+html.escape(supplier_deadline)+
-                    '</span><span>Lead time do fornecedor: '+str(res["ltm"])+
+                    '</span><span>Prazo de fornecimento do fornecedor: '+str(res["ltm"])+
                     ' meses arredondados</span></div>',unsafe_allow_html=True)
     st.markdown('<div class="sl-section">INDICADORES EXECUTIVOS</div>',unsafe_allow_html=True)
     if res is None:
@@ -294,7 +294,7 @@ def render_executive_dashboard(
                    help="Cobertura futura mediana no primeiro mês com alerta ou no primeiro mês avaliável.")
     cols[2].metric("Erro de previsão · MAPE",_percent(accuracy["mape_operacional"]) if accuracy else "—",
                    help="MAPE histórico com pares comparáveis de origem e mês-alvo. Não é o resumo fixo do TCC.")
-    cols[3].metric("Lotes com possibilidade de ajuste",str(len(actionable)),help="Prazos estimados pelo lead time mensal arredondado; não representam autorização contratual.")
+    cols[3].metric("Lotes com possibilidade de ajuste",str(len(actionable)),help="Prazos estimados pelo prazo de fornecimento mensal arredondado; não representam autorização contratual.")
     cols[4].metric("Taxa de atendimento · simulada",_percent(service),help="Atendimento projetado nos cenários da janela crítica, não atendimento real observado.")
     if accuracy is not None:
         st.markdown('<div class="sl-subline"><span>MAPE oficial: <strong>'+
@@ -339,7 +339,7 @@ def render_executive_dashboard(
     st.markdown('<div class="sl-subline"><span>180 dias = limite operacional, não um corte estatístico universal</span>'+
                 '<span>Cobertura não avaliável não significa risco zero</span>'+
                 '<span>Estoque inicial: '+_number(float(res["e0"]))+' unidades</span>'+
-                '<span>Lead time arredondado: '+str(res["ltm"])+' meses</span></div>',
+                '<span>Prazo de fornecimento arredondado: '+str(res["ltm"])+' meses</span></div>',
                 unsafe_allow_html=True)
 
     st.divider()
@@ -403,7 +403,7 @@ def render_executive_dashboard(
             status=("Admissível sob as premissas atuais" if admissible else
                     "Não admissível sob as premissas atuais")
             st.caption(status+" · Revisão do planejador necessária. "+
-                       "O lead time e os lotes mínimos do fornecedor podem impedir uma alteração teoricamente possível.")
+                       "O prazo de fornecimento e os lotes mínimos do fornecedor podem impedir uma alteração teoricamente possível.")
             st.markdown("#### Alternativas de abastecimento · comparação de impactos")
             options,_=evaluate_lot_options(res,lot_idx,target)
             view=options[["Alternativa","Excesso potencialmente evitado (un.)",
@@ -439,8 +439,8 @@ def render_executive_dashboard(
                  "A ferramenta não executa nem aprova alterações na produção.")
     st.markdown("#### Antecipação dos alertas · resultados históricos do TCC")
     ea,eb,ec=st.columns(3)
-    ea.metric("Smart Launch · alertas antes do lead time","2 / 3")
-    eb.metric("Plano oficial · alertas antes do lead time","0 / 3")
+    ea.metric("Smart Launch · alertas antes do prazo de fornecimento","2 / 3")
+    eb.metric("Plano oficial · alertas antes do prazo de fornecimento","0 / 3")
     ec.metric("Precisão histórica dos alertas","48%")
     st.caption("Resultados fixos e retrospectivos do TCC, não recalculados a partir do Triângulo enviado. "+
                "Apenas três episódios observados de excesso; ainda sem validação prospectiva ou economia real demonstrada.")
