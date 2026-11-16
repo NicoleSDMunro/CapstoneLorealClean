@@ -247,7 +247,7 @@ def classify_action(res, close, risk_month, risk_type):
     if timely:
         if all(lot["mês_limite"] for lot in timely):
             return "Confirmar fornecedor", (
-                "Lote no mês-limite estimado pelo lead time. "
+                "Lote no mês-limite estimado pelo prazo de fornecimento. "
                 "Simular é possível; mudar depende da data exata de corte."
             )
         return "Avaliar fornecedor", (
@@ -506,7 +506,7 @@ if nav == "Análise do produto":
                        label(summary["first_month"]) + " · Pico do mesmo tipo: " +
                        f'{summary["peak_probability"]*100:.1f}%' +
                        " em " + label(summary["peak_month"]) +
-                       ". Prazos calculados pelo lead time são teóricos.")
+                       ". Prazos calculados pelo prazo de fornecimento são teóricos.")
         elif summary.get("warning"):
             st.info("**Aviso: acompanhar.** "+summary["message"]+
                     " Primeiro aviso: "+summary["warning_type"].lower()+" em "+
@@ -634,7 +634,7 @@ elif page == "Previsão e modelos":
         st.caption("Histórico realizado conhecido no fechamento, sem usar vendas posteriores. "
                    "Faixa P10–P90 = percentis das mesmas trajetórias simuladas para demanda; "
                    "não é intervalo estatístico calibrado. "
-                   "A área sombreada indica a janela crítica estimada pelo lead time.")
+                   "A área sombreada indica a janela crítica estimada pelo prazo de fornecimento.")
     if not detail.empty:
         with st.expander("Inspecionar cada erro de validação"):
             st.dataframe(detail,hide_index=True,use_container_width=True)
@@ -741,7 +741,7 @@ elif page == "Simulador de decisões":
         st.warning("A simulação não está disponível: "+errors.get(product,"Dados insuficientes"))
         st.stop()
     st.caption("Produto "+product+" · Fechamento "+label(close)+
-               " · lead time arredondado: "+str(res["ltm"])+" meses.")
+               " · prazo de fornecimento arredondado: "+str(res["ltm"])+" meses.")
     status=supply_diagnosis(res,close)
     lots=eligible_lots(res,close)
     st.markdown("**Situação do plano de produção**")
@@ -958,7 +958,7 @@ elif page == "Impacto operacional":
                        "não como corte recomendado.")
         elif chosen_option != "Manter plano":
             st.info("Esta alternativa permanece dentro do critério simulado do "
-                    "TCC, sujeito à confirmação de lead time, contratos e "
+                    "TCC, sujeito à confirmação de prazo de fornecimento, contratos e "
                     "quantidades mínimas.")
         st.subheader("Efeito da alternativa selecionada")
         row1=st.columns(4)
@@ -1115,7 +1115,7 @@ elif page == "Impacto operacional":
             st.caption(str(comparison["pares"])+" previsões comparáveis nos mesmos pares "
                        "origem/alvo. Comparação de previsão reduzida (4 modelos), "
                        "não prova melhoria do estoque ou superioridade generalizável.")
-        st.subheader("5. Avisos que chegaram antes do lead time")
+        st.subheader("5. Avisos que chegaram antes do prazo de fornecimento")
         key=("impact_history",st.session_state["data_digest"],product,close,model)
         if st.session_state.get("impact_history_key")!=key:
             try:
@@ -1137,7 +1137,7 @@ elif page == "Impacto operacional":
         if total:
             tm1,tm2=st.columns(2)
             tm1.metric("Alertas únicos reconstruídos",total)
-            tm2.metric("Em tempo pelo lead time",f"{timely}/{total} · {timely/total*100:.1f}%")
+            tm2.metric("Em tempo pelo prazo de fornecimento",f"{timely}/{total} · {timely/total*100:.1f}%")
         else:
             st.info("Não há alertas históricos verificáveis para calcular a taxa de "
                     "antecedência com a metodologia e os fechamentos selecionados.")
@@ -1168,7 +1168,7 @@ elif page == "Valor demonstrado":
     b.metric("Episódios antecipados pela regra Oficial","0 de 3")
     c.metric("Precisão dos alertas fora da amostra","48%")
     st.caption("Um episódio é considerado antecipado quando o alerta chega antes do "
-               "lead time do primeiro mês de excesso. A regra do plano Oficial usa a "
+               "prazo de fornecimento do primeiro mês de excesso. A regra do plano Oficial usa a "
                "mesma base, sinalizando cobertura a partir de 180 dias. "
                "A precisão de 48% indica que ainda existem muitos falsos positivos.")
 
@@ -1266,7 +1266,7 @@ elif page == "Valor demonstrado":
                 st.caption("O aviso é o primeiro para cada mês-alvo, dentro do "
                            "recorte reconstruído. Antecedência = mês-alvo menos "
                            "fechamento do primeiro alerta. Oportunidade = prazo pelo "
-                           "lead time, incluindo mês-limite sujeito à data de corte. "
+                           "prazo de fornecimento, incluindo mês-limite sujeito à data de corte. "
                            "Não comprova que o pedido seria alterável.")
                 data_cmp=compared.to_csv(index=False).encode("utf-8-sig")
                 st.download_button(
@@ -1516,7 +1516,7 @@ cobertura pelo consumo futuro. Excesso se cobertura ≥ 180 dias, ruptura se
 venda perdida > 0. Os alertas são aplicados apenas dentro da janela crítica
 e quando o evento supera o limite de 2,5% dos cenários (aviso), e **alerta** se supera 20%.
 
-**Janela crítica:** teto(lead time em semanas × 7/30) +
+**Janela crítica:** teto(prazo de fornecimento em semanas × 7/30) +
 teto(cobertura-alvo / 30) + 1 mês.
 
 **Limitações:** poucos erros de arranque, previsões históricas sobrepostas,
