@@ -200,7 +200,7 @@ def _decision_trail(summary, res, close, count):
             ("05 / EQUILÍBRIO ENTRE RISCOS", "Excesso evitado versus vendas perdidas",
              "Compare taxa de atendimento, risco de ruptura e estoque com os mesmos cenários de demanda."),
             ("06 / RECOMENDAÇÃO", _headline(summary,True)[2],
-             "Revisão do planejador necessária before any operational change."),
+             "A revisão do planejador é obrigatória antes de qualquer alteração operacional."),
         ]
     else:
         rows=[
@@ -224,7 +224,7 @@ def render_executive_dashboard(
     product,close,blocks,results,errors,rankings,ready_count,horizon,mode,
     on_open_simulator,on_open_analytics
 ):
-    """Risk → Timing → Actionability → Alternatives → Trade-off → Recommendation."""
+    """Risk → Timing → Actionability → Alternatives → Equilíbrio entre riscos → Recommendation."""
     st.markdown(EXECUTIVE_CSS,unsafe_allow_html=True)
     res=results.get(product)
     summary=card_summary(product,res,close) if res is not None else None
@@ -240,7 +240,7 @@ def render_executive_dashboard(
                 'Admissível apenas sob as premissas atuais</small></div></div>',
                 unsafe_allow_html=True)
     st.markdown('<div class="sl-process"><b>RISCO</b> &nbsp;→&nbsp; MOMENTO &nbsp;→&nbsp; '+
-                'POSSIBILIDADE DE AÇÃO &nbsp;→&nbsp; ALTERNATIVAS &nbsp;→&nbsp; TRADE-OFF '+
+                'POSSIBILIDADE DE AÇÃO &nbsp;→&nbsp; ALTERNATIVAS &nbsp;→&nbsp; EQUILÍBRIO ENTRE RISCOS '+
                 '&nbsp;→&nbsp; <b>RECOMENDAÇÃO</b></div>',unsafe_allow_html=True)
     if res is not None:
         supplier_window=("Primeiro risco: "+label(summary["first_month"]) if summary.get("alert")
@@ -294,7 +294,7 @@ def render_executive_dashboard(
                    help="Cobertura futura mediana no primeiro mês com alerta ou no primeiro mês avaliável.")
     cols[2].metric("Erro de previsão · MAPE",_percent(accuracy["mape_operacional"]) if accuracy else "—",
                    help="MAPE histórico com pares comparáveis de origem e mês-alvo. Não é o resumo fixo do TCC.")
-    cols[3].metric("Lotes com prazo teórico · teóricos",str(len(actionable)),help="Prazos estimados pelo lead time mensal arredondado; não representam autorização contratual.")
+    cols[3].metric("Lotes com possibilidade de ajuste",str(len(actionable)),help="Prazos estimados pelo lead time mensal arredondado; não representam autorização contratual.")
     cols[4].metric("Taxa de atendimento · simulada",_percent(service),help="Atendimento projetado nos cenários da janela crítica, não atendimento real observado.")
     if accuracy is not None:
         st.markdown('<div class="sl-subline"><span>MAPE oficial: <strong>'+
@@ -303,7 +303,7 @@ def render_executive_dashboard(
                     ' previsões comparáveis</span><span>Os modelos não são alterados automaticamente</span></div>',
                     unsafe_allow_html=True)
     else:
-        st.markdown('<div class="sl-subline">Erro de previsão unavailable for this closing; no comparative superiority is inferred.</div>',
+        st.markdown('<div class="sl-subline">Erro de previsão indisponível neste fechamento; não é possível inferir superioridade entre os modelos.</div>',
                     unsafe_allow_html=True)
 
     st.markdown('<div class="sl-section">DEMANDA E RISCO PROJETADOS</div>',unsafe_allow_html=True)
@@ -311,7 +311,7 @@ def render_executive_dashboard(
     with c1:
         st.markdown('<div class="sl-panel-title">PREVISÃO DE DEMANDA</div>',unsafe_allow_html=True)
         realized=known(blocks[SHEETS[product]]["PV"],close)
-        meses=res["months"][:count]
+        months=res["months"][:count]
         try:
             official=forecast(product,months,close,blocks,model="Oficial")
         except (ValueError,KeyError,IndexError,TypeError):
@@ -374,7 +374,7 @@ def render_executive_dashboard(
         lot=next(x for x in editable if x["index"]==lot_idx)
         st.caption("Mês-limite estimado: "+label(lot["deadline"])+
                    (" · mês-limite, data exata de corte não informada" if lot["boundary"] else
-                    " · teóricos open window")+
+                    " · janela teórica ainda aberta")+
                    ". É necessária a revisão do fornecedor e do planejador.")
         if target is None:
             st.warning("Nenhum mês-alvo avaliável disponível para comparar impactos.")
@@ -393,7 +393,7 @@ def render_executive_dashboard(
             v=st.columns(5)
             v[0].metric("Redução potencial de excesso",_number(excess_avoided)+" un.")
             v[1].metric("Vendas perdidas adicionais",_number(additional_lost)+" un.")
-            v[2].metric("Taxa de atendimento · simulado",_percent(alt_metrics["fill_rate_pct"]))
+            v[2].metric("Taxa de atendimento · simulada",_percent(alt_metrics["fill_rate_pct"]))
             v[3].metric("Risco de excesso · mês-alvo",_percent(alt_metrics["risk_excess_target_pct"]),
                         delta=(f'{alt_metrics["risk_excess_target_pct"]-base_metrics["risk_excess_target_pct"]:+.1f} p.p.'),
                         delta_color="inverse")
@@ -407,7 +407,7 @@ def render_executive_dashboard(
             st.markdown("#### Alternativas de abastecimento · comparação de impactos")
             options,_=evaluate_lot_options(res,lot_idx,target)
             view=options[["Alternativa","Excesso potencialmente evitado (un.)",
-                          "Vendas perdidas adicionais (un.)","Taxa de atendimento simulado (%)",
+                          "Vendas perdidas adicionais (un.)","Fill rate simulado (%)",
                           "Dentro do critério do TCC",
                           "Não dominada (excesso × perda)"]].copy()
             view["Status"]=np.where(view["Dentro do critério do TCC"],
@@ -427,9 +427,9 @@ def render_executive_dashboard(
                 st.caption("Nenhuma redução admissível testada elimina totalmente o aumento esperado de vendas perdidas. "
                            "O planejador deve comparar todas as alternativas.")
             if base_metrics["extrapolated_months"]:
-                st.caption("Excess unidades use an extrapolated six-month demand tail beyond the recorded horizon ("+
+                st.caption("O cálculo do excesso em unidades usa a demanda extrapolada por seis meses além do horizonte registrado ("+
                            str(base_metrics["extrapolated_months"])+" mês(es)). Interprete como aproximação.")
-        st.button("Abrir alternativas detalhadas e comparação de trade-offs",on_click=on_open_simulator)
+        st.button("Abrir alternativas detalhadas e comparação de impactos das alternativas",on_click=on_open_simulator)
     st.divider()
     st.markdown("### Por que usar o Smart Launch?")
     if mode=="Executivo":
@@ -458,7 +458,7 @@ def render_executive_dashboard(
             st.markdown(
                 "- Os erros históricos disponíveis são poucos e os riscos simulados não têm calibração comprovada.\n"
                 "- A hipótese básica é Normal(0, s), salvo alteração na análise técnica.\n"
-                "- Inventory coverage is forward-looking and uses a 180 dias · limite operacional.\n"
+                "- A cobertura do estoque considera o consumo futuro e o limite operacional de 180 dias.\n"
                 "- Os prazos do fornecedor são aproximados em meses.\n"
                 "- Não há evidência prospectiva de economia de estoque nem de decisões executadas.\n"
                 "- Os resultados da MEA-P no desenvolvimento são exploratórios, não validação independente.\n"
