@@ -70,7 +70,7 @@ for k in range(4, 7):
             ws.append(["Mes/Ano"] + ["Demanda + Plano DataM" for _ in months])
             for review in revmonths:
                 if kind == "PV (SELL IN)":
-                    values = [22000*(1+0.02*i) for i in range(len(months))]
+                    values = [(0 if name.startswith("PRODUTO") and i < 5 else 22000*(1+0.02*i)) for i in range(len(months))]
                 elif kind == "PRODUÇÃO":
                     values = [28000 for _ in months]
                 else:
