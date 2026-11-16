@@ -484,7 +484,7 @@ if not revisions:
 st.markdown('<p class="sl-kicker">CENTRAL DE DECISÕES DE ABASTECIMENTO · FECHAMENTO MENSAL</p>',
             unsafe_allow_html=True)
 st.title("Central de decisões")
-st.caption("Riscos, prazos e alternativas para avaliação do planejador · seleção de modelos auditável.")
+st.caption("Seis etapas visuais: dados → modelos → previsão → simulação → riscos → decisão. Sem abas.")
 filter_a, filter_b, filter_c, filter_d = st.columns([1.05,1.05,.9,1.1])
 with filter_a:
     st.selectbox("PRODUTO", list(MODEL), key="selected_product")
@@ -530,8 +530,6 @@ for product in MODEL:
         rankings[product] = (pd.DataFrame(), pd.DataFrame(), None)
         errors["rank_" + product] = str(exc)
 
-model_review_table(rankings, errors, close)
-
 # 2) Usar somente o modelo operacional aprovado/retido no fechamento.
 for product in MODEL:
     try:
@@ -555,23 +553,257 @@ with st.sidebar:
                     st.write("**" + product + ":** " + errors.get(product, "Dados insuficientes"))
             st.caption("As vendas do mês m são recuperadas na revisão m+1. Pelo menos dois erros históricos são necessários para simular.")
 
-# Central única: recomendação e indicadores sempre na página principal.
-render_executive_dashboard(
-    product=chosen,
-    close=close,
-    blocks=blocks,
-    results=results,
-    errors=errors,
-    rankings=rankings,
-    ready_count=ready_count,
-    horizon=st.session_state.get("executive_horizon", "6 meses"),
-    mode=st.session_state.get("executive_mode", "Executivo"),
-    on_open_simulator=lambda: navigate("Impacto operacional", chosen),
-    on_open_analytics=lambda: navigate("Previsão e modelos", chosen),
-)
+# Jornada executiva: seis etapas metodológicas, todas na mesma página.
+# Todos os números são derivados de "results", "rankings" e das funções compartilhadas.
+st.markdown("""
+<style>
+.sl-step {margin:22px 0 12px; padding:14px 18px; background:#fff;
+  border:1px solid #e6e5e1; border-left:4px solid #353535;
+  border-radius:12px;}
+.sl-step .sl-num {font-size:11px;letter-spacing:.12em;font-weight:750;color:#777}
+.sl-step h3 {font-size:19px;margin:4px 0 6px!important;color:#171717!important}
+.sl-step p {margin:0;color:#666;font-size:13px;line-height:1.5}
+</style>
+""", unsafe_allow_html=True)
+
+def journey_head(number, title, description):
+    st.markdown(
+        '<div class="sl-step"><div class="sl-num">ETAPA '+str(number)+' DE 06</div>'
+        '<h3>'+html.escape(title)+'</h3><p>'+html.escape(description)+'</p></div>',
+        unsafe_allow_html=True
+    )
+
+st.markdown("## Da planilha à decisão")
+st.caption("O mesmo fluxo do motor Python, em seis etapas. Fechamento " + label(close) +
+           " · produto em foco " + chosen +
+           ". Dados e probabilidades são calculados, não exemplos ilustrativos.")
+
+# 01 — Dados: mostrar sempre toda a carteira e o histórico disponível.
+journey_head("01", "Dados e diagnóstico",
+             "Verificar a revisão, o estoque inicial, a produção e a suficiência dos dados.")
+audit_rows = []
+for p, source in SHEETS.items():
+    blocks_p = blocks[source]
+    observed_p = known(blocks_p["PV"], close)
+    initial_stock = np.nan
+    if review in blocks_p["EST"].index and close in blocks_p["EST"].columns:
+        initial_stock = float(blocks_p["EST"].loc[review, close])
+    plan_p = blocks_p["PROD"]
+    upcoming = [m for m in sorted(plan_p.columns) if m > close]
+    initial_plan = (float(plan_p.loc[review, upcoming[0]])
+                    if review in plan_p.index and upcoming else np.nan)
+    cover_target, lt_weeks = base[p]
+    audit_rows.append({
+        "Produto": p, "Vendas conhecidas": len(observed_p),
+        "Estoque inicial (un.)": round(initial_stock) if np.isfinite(initial_stock) else np.nan,
+        "Próximo lote (un.)": round(initial_plan) if np.isfinite(initial_plan) else np.nan,
+        "Lead time (semanas)": lt_weeks,
+        "Simulação": "Disponível" if results[p] is not None else "Indisponível"
+    })
+st.dataframe(pd.DataFrame(audit_rows), hide_index=True, use_container_width=True)
+observed = known(blocks[SHEETS[chosen]]["PV"], close)
+if not observed.empty:
+    history = go.Figure()
+    history.add_trace(go.Scatter(
+        x=[label(m) for m in observed.index], y=observed.values,
+        mode="lines+markers", name="Vendas realizadas",
+        line=dict(color="#3c596b",width=2), marker=dict(size=5)
+    ))
+    history.update_layout(template="plotly_white",height=220,
+                          margin=dict(l=10,r=12,t=15,b=5),
+                          yaxis_title="Unidades",xaxis_title=None)
+    st.plotly_chart(history,use_container_width=True)
+st.caption("O realizado de cada mês é recuperado da revisão seguinte; nenhum dado posterior "
+           "ao fechamento entra na previsão daquele momento.")
+
+# 02 — Ranking e aprovação humana; mesma tabela de comparação dos modelos do código.
+journey_head("02", "Avaliação e seleção dos modelos",
+             "Comparar MAPE nos mesmos pares de origem e mês-alvo e aprovar o modelo operacional.")
+model_review_table(rankings, errors, close)
+ranking_focus = rankings[chosen][1]
+if not ranking_focus.empty:
+    scores = ranking_focus[ranking_focus["Elegível"]].copy()
+    if not scores.empty:
+        bar = go.Figure(go.Bar(
+            x=scores["Modelo"], y=scores["MAPE (%)"],
+            marker_color=["#235f88" if m==st.session_state["operational_"+chosen]
+                          else "#adb7bf" for m in scores["Modelo"]],
+            text=[f"{v:.1f}%" for v in scores["MAPE (%)"]],
+            textposition="outside"
+        ))
+        bar.update_layout(template="plotly_white",height=235,
+                          margin=dict(l=8,r=8,t=25,b=10),yaxis_title="MAPE (%)")
+        st.plotly_chart(bar,use_container_width=True)
+st.caption("Ranking operacional de quatro candidatos; não substitui a seleção e validação "
+           "mais amplas descritas no notebook do TCC.")
+
+result = results.get(chosen)
+# 03 — A previsão é calculada mesmo quando a simulação do SKU não é elegível.
+journey_head("03", "Previsão mensal de demanda",
+             "Exibir a projeção do modelo em uso e a referência Oficial para os próximos meses.")
+if result is None:
+    st.info("Sem simulação probabilística para " + chosen + ": " +
+            errors.get(chosen, "erros de previsão insuficientes") +
+            ". A previsão pontual pode continuar disponível.")
+    show_available_forecast(chosen, close, blocks)
+else:
+    try:
+        official_journey = forecast(chosen,result["months"],close,blocks,model="Oficial")
+    except (ValueError,KeyError,IndexError,TypeError):
+        official_journey = None
+    st.plotly_chart(forecast_figure(
+        observed, result["months"], result["center"], official_journey,
+        result["dm"], close, label, critical_count=result["window"]
+    ),use_container_width=True)
+    visible_months = 3 if st.session_state.get("executive_horizon")=="3 meses" else (
+        6 if st.session_state.get("executive_horizon")=="6 meses" else len(result["months"]))
+    forecast_rows=[]
+    for j,m in enumerate(result["months"][:visible_months]):
+        official_v = (float(official_journey[j]) if official_journey is not None
+                      and j<len(official_journey) and np.isfinite(official_journey[j])
+                      else np.nan)
+        forecast_rows.append({"Mês":label(m),
+                              "Smart Launch (un.)":round(float(result["center"][j])),
+                              "Oficial (un.)":round(official_v) if np.isfinite(official_v) else np.nan,
+                              "Produção planejada (un.)":round(float(result["production"][j]))})
+    st.dataframe(pd.DataFrame(forecast_rows),hide_index=True,use_container_width=True)
+    st.caption("A faixa P10–P90 do gráfico representa cenários simulados, não intervalo "
+               "preditivo com calibração comprovada.")
+
+# 04 — Incerteza e projeção do balanço de estoque.
+journey_head("04", "Incerteza e evolução do estoque",
+             "Simular possíveis vendas e projetar o estoque com o plano de produção informado.")
+if result is None:
+    st.warning("Sem erros históricos suficientes, esta etapa não gera chances de excesso ou ruptura.")
+else:
+    c1,c2,c3=st.columns(3)
+    c1.metric("Trajetórias simuladas",str(len(result["dm"])))
+    c2.metric("Erros históricos disponíveis",str(len(result["errors"])))
+    c3.metric("Desvio-padrão dos erros",fmt(result["sd"])+" un.")
+    st.plotly_chart(stock_flow_figure(result,label,coverage_limit=LIM),
+                    use_container_width=True)
+    rows_journey = rows_from_sim(result)
+    st.dataframe(rows_journey[["Mês","Previsão (un.)","Estoque P50 (un.)",
+                               "Cobertura P50 (dias)"]].head(visible_months),
+                 hide_index=True,use_container_width=True)
+    st.caption("O saldo segue estoque anterior + recebimentos − vendas atendidas. "
+               "O último mês pode ter cobertura não avaliável; isso não significa risco zero.")
+
+# 05 — O problema central do TCC: excesso e oportunidade de intervenção.
+journey_head("05", "Risco de excesso e prazo para agir",
+             "Localizar o mês crítico, avaliar os alertas e verificar o lead time dos lotes.")
+if result is None:
+    st.info("Riscos probabilísticos indisponíveis para "+chosen+". Nenhum alerta foi inventado.")
+else:
+    cex,cru=st.columns(2)
+    with cex:
+        st.markdown("**Chance de excesso (cobertura ≥ 180 dias)**")
+        st.plotly_chart(risk_plot(result,rows_journey,"Excesso (%)","#b42318"),
+                        use_container_width=True)
+    with cru:
+        st.markdown("**Chance de vendas perdidas**")
+        st.plotly_chart(risk_plot(result,rows_journey,"Ruptura (%)","#bd8d2d"),
+                        use_container_width=True)
+    st.dataframe(rows_journey[["Mês","Excesso (%)","Ruptura (%)",
+                                "Janela crítica","Alerta excesso","Alerta ruptura"]].head(visible_months),
+                 hide_index=True,use_container_width=True)
+    flagged_journey = rows_journey[
+        rows_journey["Janela crítica"] &
+        (rows_journey["Alerta excesso"]|rows_journey["Alerta ruptura"])
+    ]
+    if flagged_journey.empty:
+        st.info("Nenhum alerta acima de 20% na janela crítica deste produto. "
+                "Os avisos acima de 2,5%, se presentes, ainda exigem acompanhamento.")
+    else:
+        first=flagged_journey.iloc[0]
+        kind="excesso" if first["Alerta excesso"] else "ruptura"
+        action,why=classify_action(result,close,first["Período"],kind)
+        st.write("**Primeiro alerta:** "+first["Mês"]+" · "+kind+
+                 " — **"+action+"**. "+why)
+    with st.expander("Conferir mês-limite de cada lote e meses sem produção"):
+        st.dataframe(supply_plan_table(result,close),hide_index=True,use_container_width=True)
+    st.caption("Aviso >2,5% e alerta >20% são parâmetros exploratórios. "
+               "O prazo é estimado em meses e precisa de confirmação contratual.")
+
+# 06 — Comparar alternativas usando exatamente a mesma sacola de demandas.
+journey_head("06", "Alternativas e decisão do planejador",
+             "Comparar o plano atual com um ajuste factível em tese e medir o trade-off estoque × serviço.")
+if result is None:
+    st.info("A comparação probabilística depende da etapa 04; sem simulação não há ganho estimado.")
+else:
+    lot_options=editable_lots(result,close)
+    targets=[j for j in range(len(result["months"])) if bool(result["active"][j])
+             and bool(result["evaluated"][j])]
+    if not lot_options:
+        st.warning("Não há lote futuro positivo com prazo teórico elegível para avaliar um corte. "
+                   "Revisar compromissos não registrados e possíveis ações comerciais.")
+    elif not targets:
+        st.info("Não existem meses-alvo com cobertura avaliável nesta janela.")
+    else:
+        options_by_index={item["index"]:item for item in lot_options}
+        c_lot,c_target=st.columns(2)
+        with c_lot:
+            lot_index=st.selectbox("Lote positivo para simular",list(options_by_index),
+                format_func=lambda j: label(options_by_index[j]["month"])+
+                " · "+fmt(options_by_index[j]["units"])+" un.",key="journey_lot")
+        with c_target:
+            target_index=st.selectbox("Mês-alvo do excesso",targets,
+                          format_func=lambda j:label(result["months"][j]),key="journey_target")
+        picked_lot=options_by_index[lot_index]
+        if picked_lot["boundary"]:
+            st.warning("O lote está no mês-limite pelo lead time: só o fornecedor pode "
+                       "confirmar se ainda aceita a mudança.")
+        try:
+            alternatives,baseline=evaluate_lot_options(result,lot_index,target_index)
+        except ValueError as exc:
+            st.warning("Não foi possível comparar esta alternativa: "+str(exc))
+        else:
+            selected_option=st.selectbox("Alternativa para avaliar",
+                alternatives["Alternativa"].tolist(),key="journey_alternative")
+            selected=alternatives.loc[
+                alternatives["Alternativa"]==selected_option].iloc[0]
+            a,b,c=st.columns(3)
+            a.metric("Excesso evitado (estimado)",
+                     fmt(selected["Excesso potencialmente evitado (un.)"])+" un.")
+            b.metric("Vendas perdidas adicionais",
+                     fmt(selected["Vendas perdidas adicionais (un.)"])+" un.")
+            c.metric("Fill rate simulado",
+                     f'{selected["Fill rate simulado (%)"]:.1f}%')
+            st.plotly_chart(tradeoff_figure(alternatives,selected_option),
+                            use_container_width=True)
+            st.dataframe(alternatives[["Alternativa",
+                "Excesso potencialmente evitado (un.)","Vendas perdidas adicionais (un.)",
+                "Fill rate simulado (%)","Dentro do critério do TCC"]],
+                hide_index=True,use_container_width=True)
+            if selected["Dentro do critério do TCC"]:
+                st.info("Cenário admissível sob as premissas do teste; "
+                        "revisão do planejador e confirmação com fornecedor obrigatórias.")
+            else:
+                st.warning("A alternativa não atende aos critérios exploratórios de proteção "
+                           "do serviço ou de não criar novo excesso.")
+            if selected["Meses extrapolados após alvo"]>0:
+                st.caption("Excesso em unidades estimado com "+
+                           str(int(selected["Meses extrapolados após alvo"]))+
+                           " mês(es) de consumo futuro extrapolado(s).")
+    st.caption("Comparações contrafactuais com 1.000 demandas iguais no plano original e no "
+               "alternativo. Não representam redução de custos ou execução de cancelamento.")
+
 st.divider()
-st.markdown("### Análises e evidências detalhadas")
-st.caption("A Central de decisões permanece visível. Abra apenas o detalhamento necessário, sem navegar entre abas.")
+st.markdown("### Resultado, confiabilidade e exportações")
+st.caption("As seis etapas mostram o processamento do fechamento. As evidências retrospectivas, "
+           "ressalvas metodológicas e arquivos de auditoria ficam no detalhamento abaixo.")
+if st.checkbox("Mostrar painel executivo completo",value=False,key="journey_show_executive"):
+    render_executive_dashboard(
+        product=chosen,close=close,blocks=blocks,results=results,errors=errors,
+        rankings=rankings,ready_count=ready_count,
+        horizon=st.session_state.get("executive_horizon","6 meses"),
+        mode=st.session_state.get("executive_mode","Executivo"),
+        on_open_simulator=lambda: navigate("Impacto operacional",chosen),
+        on_open_analytics=lambda: navigate("Previsão e modelos",chosen),
+    )
+st.markdown("### Auditoria e análises aprofundadas (opcionais)")
+st.caption("Não são abas: os detalhes técnicos são abertos somente quando necessários.")
+
 if st.session_state.get("detail_page") not in DETAIL_PAGES:
     st.session_state["detail_page"] = DETAIL_PAGES[0]
 page = st.selectbox("EXPLORAR DETALHES", DETAIL_PAGES, key="detail_page")
