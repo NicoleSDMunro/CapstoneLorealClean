@@ -600,7 +600,7 @@ for p, source in SHEETS.items():
         "Lead time (semanas)": lt_weeks,
         "Simulação": "Disponível" if results[p] is not None else "Indisponível"
     })
-st.dataframe(pd.DataFrame(audit_rows), hide_index=True, use_container_width=True)
+st.dataframe(pd.DataFrame(audit_rows), hide_index=True, use_container_width=True,key="journey_audit")
 observed = known(blocks[SHEETS[chosen]]["PV"], close)
 if not observed.empty:
     history = go.Figure()
@@ -612,7 +612,7 @@ if not observed.empty:
     history.update_layout(template="plotly_white",height=220,
                           margin=dict(l=10,r=12,t=15,b=5),
                           yaxis_title="Unidades",xaxis_title=None)
-    st.plotly_chart(history,use_container_width=True)
+    st.plotly_chart(history,use_container_width=True,key="journey_data_history")
 st.caption("O realizado de cada mês é recuperado da revisão seguinte; nenhum dado posterior "
            "ao fechamento entra na previsão daquele momento.")
 
@@ -633,7 +633,7 @@ if not ranking_focus.empty:
         ))
         bar.update_layout(template="plotly_white",height=235,
                           margin=dict(l=8,r=8,t=25,b=10),yaxis_title="MAPE (%)")
-        st.plotly_chart(bar,use_container_width=True)
+        st.plotly_chart(bar,use_container_width=True,key="journey_mape")
 st.caption("Ranking operacional de quatro candidatos; não substitui a seleção e validação "
            "mais amplas descritas no notebook do TCC.")
 
@@ -654,7 +654,7 @@ else:
     st.plotly_chart(forecast_figure(
         observed, result["months"], result["center"], official_journey,
         result["dm"], close, label, critical_count=result["window"]
-    ),use_container_width=True)
+    ),use_container_width=True,key="journey_forecast")
     visible_months = 3 if st.session_state.get("executive_horizon")=="3 meses" else (
         6 if st.session_state.get("executive_horizon")=="6 meses" else len(result["months"]))
     forecast_rows=[]
@@ -666,7 +666,7 @@ else:
                               "Smart Launch (un.)":round(float(result["center"][j])),
                               "Oficial (un.)":round(official_v) if np.isfinite(official_v) else np.nan,
                               "Produção planejada (un.)":round(float(result["production"][j]))})
-    st.dataframe(pd.DataFrame(forecast_rows),hide_index=True,use_container_width=True)
+    st.dataframe(pd.DataFrame(forecast_rows),hide_index=True,use_container_width=True,key="journey_forecast_table")
     st.caption("A faixa P10–P90 do gráfico representa cenários simulados, não intervalo "
                "preditivo com calibração comprovada.")
 
@@ -681,11 +681,11 @@ else:
     c2.metric("Erros históricos disponíveis",str(len(result["errors"])))
     c3.metric("Desvio-padrão dos erros",fmt(result["sd"])+" un.")
     st.plotly_chart(stock_flow_figure(result,label,coverage_limit=LIM),
-                    use_container_width=True)
+                    use_container_width=True,key="journey_stock")
     rows_journey = rows_from_sim(result)
     st.dataframe(rows_journey[["Mês","Previsão (un.)","Estoque P50 (un.)",
                                "Cobertura P50 (dias)"]].head(visible_months),
-                 hide_index=True,use_container_width=True)
+                 hide_index=True,use_container_width=True,key="journey_stock_table")
     st.caption("O saldo segue estoque anterior + recebimentos − vendas atendidas. "
                "O último mês pode ter cobertura não avaliável; isso não significa risco zero.")
 
@@ -699,14 +699,14 @@ else:
     with cex:
         st.markdown("**Chance de excesso (cobertura ≥ 180 dias)**")
         st.plotly_chart(risk_plot(result,rows_journey,"Excesso (%)","#b42318"),
-                        use_container_width=True)
+                        use_container_width=True,key="journey_risk_excess")
     with cru:
         st.markdown("**Chance de vendas perdidas**")
         st.plotly_chart(risk_plot(result,rows_journey,"Ruptura (%)","#bd8d2d"),
-                        use_container_width=True)
+                        use_container_width=True,key="journey_risk_rupture")
     st.dataframe(rows_journey[["Mês","Excesso (%)","Ruptura (%)",
                                 "Janela crítica","Alerta excesso","Alerta ruptura"]].head(visible_months),
-                 hide_index=True,use_container_width=True)
+                 hide_index=True,use_container_width=True,key="journey_risk_table")
     flagged_journey = rows_journey[
         rows_journey["Janela crítica"] &
         (rows_journey["Alerta excesso"]|rows_journey["Alerta ruptura"])
@@ -770,11 +770,11 @@ else:
             c.metric("Fill rate simulado",
                      f'{selected["Fill rate simulado (%)"]:.1f}%')
             st.plotly_chart(tradeoff_figure(alternatives,selected_option),
-                            use_container_width=True)
+                            use_container_width=True,key="journey_tradeoff")
             st.dataframe(alternatives[["Alternativa",
                 "Excesso potencialmente evitado (un.)","Vendas perdidas adicionais (un.)",
                 "Fill rate simulado (%)","Dentro do critério do TCC"]],
-                hide_index=True,use_container_width=True)
+                hide_index=True,use_container_width=True,key="journey_alternatives_table")
             if selected["Dentro do critério do TCC"]:
                 st.info("Cenário admissível sob as premissas do teste; "
                         "revisão do planejador e confirmação com fornecedor obrigatórias.")
