@@ -103,7 +103,7 @@ def discover_products(wb):
     """Descobre todos os SKUs pelo nome das abas; mantém as escolhas históricas P1–P3."""
     discovered = {}
     for sheet in wb.sheetnames:
-        match = re.fullmatch(r"PRODUTO\\s+(\\d+)", sheet.strip(), flags=re.IGNORECASE)
+        match = re.fullmatch(r"PRODUTO\s+(\d+)", sheet.strip(), flags=re.IGNORECASE)
         if match:
             product = "P" + str(int(match.group(1)))
             discovered[product] = sheet
@@ -115,7 +115,7 @@ def discover_products(wb):
         suffix = product[1:]
         new_analog[product] = sorted(
             name for name in wb.sheetnames
-            if re.fullmatch(r"BENCH\\s+.+_" + re.escape(suffix), name.strip(), flags=re.IGNORECASE)
+            if re.fullmatch(r"BENCH\s+.+_" + re.escape(suffix), name.strip(), flags=re.IGNORECASE)
         )
     previous_models = dict(MODEL)
     SHEETS.clear()
