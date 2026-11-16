@@ -685,7 +685,7 @@ elif page == "Riscos de estoque":
                    "Cobertura P50 (dias)","Excesso (%)","Ruptura (%)",
                    "Janela crítica","Aviso excesso","Aviso ruptura",
                    "Alerta excesso","Alerta ruptura"]]
-    st.dataframe(display,hide_index=True,use_container_width=True)
+    st.dataframe(display.rename(columns={"Fill rate simulado (%)":"Taxa de atendimento simulada (%)"}),hide_index=True,use_container_width=True)
     flagged=frame[frame["Alerta excesso"]|frame["Alerta ruptura"]]
     if flagged.empty:
         warnings = frame[frame["Aviso excesso"]|frame["Aviso ruptura"]]
@@ -800,7 +800,7 @@ elif page == "Simulador de decisões":
             st.warning("Cenário matemático, não autorização de alteração. Confirme contratos, capacidade, insumos e lotes mínimos antes de agir.")
         else:
             st.warning("Esta ação não cabe no horizonte de planejamento disponível.")
-    st.button("Comparar impacto em unidades e fill rate",key="impact_from_sim",
+    st.button("Comparar impactos em unidades e taxa de atendimento",key="impact_from_sim",
               on_click=navigate,args=("Impacto operacional",product))
 
 elif page == "Impacto operacional":
@@ -816,7 +816,7 @@ elif page == "Impacto operacional":
             errors.get(product,"Dados insuficientes.")
         )
         st.info("Sem uma sacola de demanda válida, não é possível quantificar "
-                "excesso evitado, vendas perdidas adicionais ou fill rate simulado.")
+                "excesso evitado, vendas perdidas adicionais ou taxa de atendimento simulada.")
         show_available_forecast(product,close,blocks)
         st.stop()
 
@@ -851,14 +851,14 @@ elif page == "Impacto operacional":
     baseline_cols=st.columns(3)
     baseline_cols[0].metric("Excesso esperado · plano atual",fmt(initial["expected_excess_units"])+" un.")
     baseline_cols[1].metric("Vendas perdidas · plano atual",fmt(initial["expected_lost_units"])+" un.")
-    baseline_cols[2].metric("Fill rate · plano atual",f'{initial["fill_rate_pct"]:.1f}%')
+    baseline_cols[2].metric("Taxa de atendimento · plano atual",f'{initial["fill_rate_pct"]:.1f}%')
     if initial["extrapolated_months"]:
         st.warning(
             f'{initial["extrapolated_months"]} dos 6 meses após o alvo estão além do '
             "horizonte simulado; para calcular o excesso, o motor repete a última "
             "demanda simulada. Interprete a quantidade excedente como aproximação."
         )
-    st.caption("Vendas perdidas e fill rate são calculados somente sobre os "
+    st.caption("Vendas perdidas e taxa de atendimento são calculadas somente sobre os "
                "meses da janela crítica, usando a mesma demanda em todos os planos.")
     st.markdown("**Diagnóstico de abastecimento:** " + status["situation"])
     st.caption(status["guidance"])
@@ -967,7 +967,7 @@ elif page == "Impacto operacional":
         service_change=float(selected["Fill rate simulado (%)"])-baseline["fill_rate_pct"]
         row1[0].metric("Excesso potencialmente evitado",f'{excess_change:+,.0f} un.'.replace(",","."),help="Diferença entre excedente esperado no plano atual e na alternativa, no mesmo mês-alvo.")
         row1[1].metric("Vendas perdidas adicionais",f'{lost_change:+,.0f} un.'.replace(",","."),help="Diferença nas perdas esperadas totais da janela crítica.")
-        row1[2].metric("Fill rate projetado",f'{float(selected["Fill rate simulado (%)"]):.1f}%',
+        row1[2].metric("Taxa de atendimento projetada",f'{float(selected["Fill rate simulado (%)"]):.1f}%',
                        delta=f'{service_change:+.1f} p.p.',delta_color="normal")
         row1[3].metric("Prazo teórico do lote",label(lot["deadline"]))
         st.caption(
@@ -982,7 +982,7 @@ elif page == "Impacto operacional":
                    "O losango mostra a seleção. Nenhum ponto significa corte aprovado.")
         with st.expander("Detalhes da análise: fronteira entre excesso e vendas perdidas"):
             min_fill=st.slider(
-                "Meta mínima de fill rate para exploração (%)",
+                "Meta mínima exploratória de atendimento (%)",
                 min_value=70,max_value=100,value=95,step=1,key="impact_min_fill"
             )
             st.caption(
@@ -1023,7 +1023,7 @@ elif page == "Impacto operacional":
                 paper_bgcolor="#ffffff",plot_bgcolor="#ffffff"
             )
             st.plotly_chart(fig,use_container_width=True)
-            st.caption("Pontos verdes cumprem a meta exploratória de fill rate; vermelhos, não. "
+            st.caption("Pontos verdes cumprem a meta exploratória de atendimento; vermelhos, não. "
                        "O losango destaca a alternativa selecionada. "
                        "Uma alternativa não dominada apresenta uma troca potencial entre "
                        "excesso e perdas; isso não significa custo mínimo ou decisão ótima.")
@@ -1046,16 +1046,16 @@ elif page == "Impacto operacional":
             ]
             for col in int_cols:
                 display[col]=display[col].round(0).astype(int)
-            st.dataframe(display,hide_index=True,use_container_width=True)
+            st.dataframe(display.rename(columns={"Fill rate simulado (%)":"Taxa de atendimento simulada (%)"}),hide_index=True,use_container_width=True)
             if not bool(selected["Não dominada (excesso × perda)"]):
                 st.info("A alternativa selecionada é dominada: existe outra com "
                         "excesso esperado e vendas perdidas iguais ou menores.")
             if float(selected["Fill rate simulado (%)"])<min_fill:
-                st.warning("A alternativa está abaixo da meta exploratória de fill rate. "
+                st.warning("A alternativa está abaixo da meta exploratória de atendimento. "
                            "Não há justificativa para recomendá-la automaticamente.")
         st.download_button(
             "Exportar comparação (CSV)",
-            frame.to_csv(index=False).encode("utf-8-sig"),
+            frame.rename(columns={"Fill rate simulado (%)":"Taxa de atendimento simulada (%)"}).to_csv(index=False).encode("utf-8-sig"),
             file_name="impacto_"+product+"_"+label(close).replace("/","-")+".csv",
             mime="text/csv"
         )
@@ -1073,7 +1073,7 @@ elif page == "Impacto operacional":
              "Valor":round(float(selected["Excesso potencialmente evitado (un.)"]))},
             {"Campo":"Vendas perdidas adicionais (un.)",
              "Valor":round(float(selected["Vendas perdidas adicionais (un.)"]))},
-            {"Campo":"Fill rate simulado (%)",
+            {"Campo":"Taxa de atendimento simulada (%)",
              "Valor":round(float(selected["Fill rate simulado (%)"]),2)},
             {"Campo":"Status", "Valor":"Cenário hipotético — não executado"},
             {"Campo":"Pendências",
@@ -1082,7 +1082,7 @@ elif page == "Impacto operacional":
         arquivo_excel = BytesIO()
         with pd.ExcelWriter(arquivo_excel, engine="openpyxl") as escritor:
             resumo_decisao.to_excel(escritor,sheet_name="Resumo para reuniao",index=False)
-            frame.to_excel(escritor, sheet_name="Todas alternativas", index=False)
+            frame.rename(columns={"Fill rate simulado (%)":"Taxa de atendimento simulada (%)"}).to_excel(escritor, sheet_name="Todas alternativas", index=False)
         st.download_button(
             "Baixar análise para reunião (Excel)",
             arquivo_excel.getvalue(),
