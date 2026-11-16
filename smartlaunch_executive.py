@@ -318,7 +318,8 @@ def render_executive_dashboard(
             official=None
         fig=forecast_figure(
             realized,months,res["center"][:count],official,res["dm"][:,:count],
-            close,label,critical_count=min(res["window"],count))
+            close,label,critical_count=min(res["window"],count),
+            percentile_bounds=(2.5,97.5))
         fig.update_layout(height=231,margin=dict(l=10,r=8,t=7,b=35),
                           font=dict(color="#102A43",size=11),
                           legend=dict(orientation="h",y=-.27,x=0,font=dict(size=10)))
@@ -329,7 +330,7 @@ def render_executive_dashboard(
     with c2:
         st.markdown('<div class="sl-panel-title">RISK MONITOR</div>',unsafe_allow_html=True)
         st.plotly_chart(_risk_plot(_risk_frame(res,count)),use_container_width=True)
-    st.markdown('<div class="sl-subline"><span>Forecast interval: simulated P10–P90, not calibrated</span>'+
+    st.markdown('<div class="sl-subline"><span>Forecast interval: simulated P2.5–P97.5, not calibrated</span>'+
                 '<span>Risk = conditional scenario frequency</span>'+
                 '<span>Alert trigger &gt;20%; watch &gt;2.5% (exploratory)</span></div>',
                 unsafe_allow_html=True)
@@ -435,7 +436,14 @@ def render_executive_dashboard(
         st.write("Smart Launch adds a traceable decision-support layer between forecasting, "
                  "inventory exposure, supplier timing and planner-led action. "
                  "The framework does not execute or approve production changes.")
-    else:
+    st.markdown("#### Early Warning Performance · historical TCC study")
+    ea,eb,ec=st.columns(3)
+    ea.metric("Smart Launch · alerts before LT","2 / 3")
+    eb.metric("Official benchmark · alerts before LT","0 / 3")
+    ec.metric("Historical alert precision","48%")
+    st.caption("Fixed exploratory/retrospective TCC study results, not recalculated from the uploaded Triângulo. "+
+               "Only three observed excess episodes; no prospective validation or realized savings demonstrated.")
+    if mode!="Executive":
         _decision_trail(summary,res,close,count)
     if mode=="Analyst":
         st.markdown("### Evidence Quality & Model Assumptions")
