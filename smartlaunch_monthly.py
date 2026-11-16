@@ -9,7 +9,8 @@ def evaluate_models(product, close, blocks, forecast_fn, known_fn):
     Todos os concorrentes são avaliados nos MESMOS pares origem/alvo.
     Esta é uma implementação complementar; homologar contra o notebook final.
     """
-    pv=blocks[{"P1":"PRODUTO 1","P2":"PRODUTO 2","P3":"PRODUTO 3"}[product]]["PV"]
+    from smartlaunch_core import SHEETS, ANALOG
+    pv=blocks[SHEETS[product]]["PV"]
     actual=known_fn(pv,close)
     if actual.empty:
         return pd.DataFrame(), pd.DataFrame(), None
@@ -24,6 +25,8 @@ def evaluate_models(product, close, blocks, forecast_fn, known_fn):
         if not targets:
             continue
         for model in CANDIDATES:
+            if model in ("MEA", "MEA-P") and not ANALOG.get(product):
+                continue
             try:
                 pred=forecast_fn(product,targets,origin,blocks,model=model)
             except (ValueError,KeyError,IndexError,TypeError):
@@ -34,10 +37,11 @@ def evaluate_models(product, close, blocks, forecast_fn, known_fn):
     if not observations:
         return pd.DataFrame(),pd.DataFrame(),None
     pairs=set((o,t) for o,t,m in observations)
-    common=[(o,t) for o,t in sorted(pairs) if all((o,t,m) in observations for m in CANDIDATES)]
+    eligible_candidates = tuple(m for m in CANDIDATES if m not in ("MEA","MEA-P") or ANALOG.get(product))
+    common=[(o,t) for o,t in sorted(pairs) if all((o,t,m) in observations for m in eligible_candidates)]
     records=[]
     for origin,target in common:
-        for model in CANDIDATES:
+        for model in eligible_candidates:
             actual_value=float(actual[target])
             predicted=observations[(origin,target,model)]
             records.append(dict(Origem=str(origin),Alvo=str(target),Horizonte=(target-origin).n,
