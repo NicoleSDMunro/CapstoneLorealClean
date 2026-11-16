@@ -38,7 +38,7 @@ res = {
 p = forecast_figure(history, months, res["center"], np.ones(5)*120,
                     demand, close, label, critical_count=3)
 assert len(p.data) == 5, "Realizado + 2 previsões + limites da simulação"
-assert "Real" in p.data[0].name
+assert "realizad" in p.data[0].name.lower()
 assert any("Oficial" in trace.name for trace in p.data)
 assert "não calibrada" in str([t.name for t in p.data])
 f = stock_flow_figure(res, label)
