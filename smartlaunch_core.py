@@ -157,7 +157,12 @@ def known(pv,c):
     return s[s.index>=pos.index[0]] if not pos.empty else pd.Series(dtype=float)
 
 def analog_series(blocks,c):
-    return {b:known(blocks[b]["PV"],c) for b in set(sum(ANALOG.values(),[]))}
+    # A MEA-P histórica foi calibrada com os benchmarks dos três produtos
+    # originais. Adicionar novos SKUs não pode alterar retroativamente o pipe.
+    reference = set(sum((ANALOG.get(p, []) for p in ("P1","P2","P3")), []))
+    if not reference:
+        reference = set(sum(ANALOG.values(), []))
+    return {b:known(blocks[b]["PV"],c) for b in reference}
 
 def pipe_index(blocks,c):
     ix=[]
