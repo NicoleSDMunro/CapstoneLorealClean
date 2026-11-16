@@ -362,20 +362,20 @@ def classify_action(res, close, risk_month, risk_type):
     )
 
 
-def risk_plot(res, rowset, column, color, light="#f2bdb5"):
+def risk_plot(res, rowset, column, color, light="#F1D2D0"):
     """Barra escura = alerta, clara = aviso, cinza = sem gatilho/fora do período."""
     vals = rowset[column].to_numpy(float)
     active = rowset["Janela crítica"].to_numpy(bool)
     colors=[]
     for i,v in enumerate(vals):
         if not active[i] or not np.isfinite(v):
-            colors.append("#d8d8d6")
+            colors.append("#CCD7E0")
         elif v>100*LIMIT_ALERT:
             colors.append(color)
         elif v>100*LIMIT_WARN:
             colors.append(light)
         else:
-            colors.append("#d8d8d6")
+            colors.append("#CCD7E0")
     texts=[chance_txt(v/100) if np.isfinite(v) else "não avaliado" for v in vals]
     fig=go.Figure()
     fig.add_trace(go.Bar(
@@ -514,6 +514,7 @@ with filter_b:
                  index=1,key="executive_horizon")
 review=st.session_state["selected_revision"]
 close=review-1
+file_name=st.session_state.get("triangulo_file_name","Triângulo carregado na sessão")
 scope = (st.session_state["data_digest"], str(review))
 if scope != st.session_state.get("active_model_scope"):
     approved = st.session_state.setdefault("approved_models_by_close", {})
@@ -750,7 +751,7 @@ else:
     cex,cru=st.columns(2)
     with cex:
         st.markdown("**Chance de excesso (cobertura ≥ 180 dias)**")
-        st.plotly_chart(risk_plot(result,rows_journey,"Excesso (%)","#b42318"),
+        st.plotly_chart(risk_plot(result,rows_journey,"Excesso (%)","#BB4E46"),
                         use_container_width=True,key="journey_risk_excess")
     with cru:
         st.markdown("**Chance de vendas perdidas**")
@@ -982,13 +983,13 @@ elif page == "Riscos de estoque":
             st.markdown("#### Chance de estoque acima de seis meses")
             st.caption("Cobertura ≥ 180 dias · linha pontilhada: aviso 2,5%; "
                        "tracejada: alerta 20%. Último mês sem cobertura futura: não avaliado.")
-            st.plotly_chart(risk_plot(res,frame,"Excesso (%)","#b42318"),use_container_width=True)
+            st.plotly_chart(risk_plot(res,frame,"Excesso (%)","#BB4E46"),use_container_width=True)
     with ru_col:
         with st.container(border=True):
             st.markdown("#### Chance de venda perdida (ruptura)")
             st.caption("Venda não atendida · linha pontilhada: aviso 2,5%; "
                        "tracejada: alerta 20%.")
-            st.plotly_chart(risk_plot(res,frame,"Ruptura (%)","#d39b24"),use_container_width=True)
+            st.plotly_chart(risk_plot(res,frame,"Ruptura (%)","#AF7B31"),use_container_width=True)
     st.subheader("Riscos e encaminhamentos por mês")
     st.caption(CHANCE_NOTE)
     display=frame[["Mês","Previsão (un.)","Estoque P50 (un.)",
@@ -1033,7 +1034,7 @@ elif page == "Riscos de estoque":
     if len(past)>=2:
         pframe=pd.DataFrame(past)
         line=go.Figure()
-        for column,color in (("Excesso (%)","#b42318"),("Ruptura (%)","#d39b24")):
+        for column,color in (("Excesso (%)","#BB4E46"),("Ruptura (%)","#AF7B31")):
             line.add_trace(go.Scatter(x=pframe["Fechamento"],y=pframe[column],
                                       mode="lines+markers",name=column,
                                       line=dict(color=color,width=3)))
@@ -1743,7 +1744,7 @@ elif page == "Validação histórica dos alertas":
             fchart.add_trace(go.Scatter(
                 x=chart_source["Fechamento"],y=chart_source[risk_col],
                 name=chart_type,mode="lines+markers",
-                line=dict(color="#b42318" if chart_type=="Excesso" else "#d69b14",width=3)
+                line=dict(color="#BB4E46" if chart_type=="Excesso" else "#d69b14",width=3)
             ))
             fchart.add_hline(y=2.5,line_dash="dash",line_color="#595959",
                              annotation_text="Gatilho 2,5%",annotation_position="top left")
