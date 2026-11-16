@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from smartlaunch_core import (
-    MODEL, SHEETS, LIM, N, label, load_data, known, forecast,
+    MODEL, SHEETS, ANALOG, LIM, N, label, load_data, known, forecast,
     simulate, impacts, fmt, AVISO, ALERTA, MARGEM_MC,
     nivel, chance_txt,
 )
@@ -583,24 +583,90 @@ st.caption("O realizado de cada mês é recuperado da revisão seguinte; nenhum 
 journey_head("02", "Avaliação e seleção dos modelos",
              "Comparar MAPE nos mesmos pares de origem e mês-alvo e aprovar o modelo operacional.")
 model_review_table(rankings, errors, close)
-ranking_focus = rankings[chosen][1]
-if not ranking_focus.empty:
-    scores = ranking_focus[ranking_focus["Elegível"]].copy()
-    if not scores.empty:
-        bar = go.Figure(go.Bar(
-            x=scores["Modelo"], y=scores["MAPE (%)"],
-            marker_color=["#235f88" if m==st.session_state["operational_"+chosen]
-                          else "#adb7bf" for m in scores["Modelo"]],
-            text=[f"{v:.1f}%" for v in scores["MAPE (%)"]],
-            textposition="outside"
-        ))
-        bar.update_layout(template="plotly_white",height=235,
-                          margin=dict(l=8,r=8,t=25,b=10),yaxis_title="MAPE (%)")
-        st.plotly_chart(bar,use_container_width=True,key="journey_mape")
-st.caption("Ranking operacional de quatro candidatos; não substitui a seleção e validação "
-           "mais amplas descritas no notebook do TCC.")
+model_review_table(rankings, errors, close)
+st.markdown("#### Seleção para continuar")
+st.caption("Escolha o produto e o modelo de previsão. Só o clique em **Confirmar e analisar** "
+           "inicia a previsão, a simulação e as próximas etapas.")
+if st.session_state.get("journey_choice_product") not in MODEL:
+    st.session_state["journey_choice_product"]=next(iter(MODEL))
+left_choice,right_choice=st.columns(2)
+with left_choice:
+    choice_product=st.selectbox("ESCOLHER PRODUTO",list(MODEL),key="journey_choice_product")
+models_allowed=["MEA-P","MEA","Oficial","Naive"] if ANALOG.get(choice_product) else ["Oficial","Naive"]
+if st.session_state.get("journey_choice_scope") != (scope,choice_product):
+    st.session_state["journey_choice_scope"]=(scope,choice_product)
+    st.session_state["journey_choice_model"]=st.session_state["operational_"+choice_product]
+if st.session_state["journey_choice_model"] not in models_allowed:
+    st.session_state["journey_choice_model"]=models_allowed[0]
+with right_choice:
+    choice_model=st.selectbox("ESCOLHER MODELO",models_allowed,key="journey_choice_model")
 
-result = results.get(chosen)
+ranking_focus=rankings[choice_product][1]
+if not ranking_focus.empty:
+    eligible=ranking_focus[ranking_focus["Elegível"]].copy()
+    if not eligible.empty:
+        mape_chart=go.Figure(go.Bar(
+            x=eligible["Modelo"],y=eligible["MAPE (%)"],
+            marker_color=["#246A8C" if m==choice_model else "#B2C1CC" for m in eligible["Modelo"]],
+            text=[f"{v:.1f}%" for v in eligible["MAPE (%)"]],textposition="outside"))
+        mape_chart.update_layout(template="plotly_white",height=225,
+            margin=dict(l=8,r=8,t=18,b=8),yaxis_title="MAPE (%)",
+            paper_bgcolor="#fff",plot_bgcolor="#fff",font=dict(color="#182C40"))
+        st.plotly_chart(mape_chart,use_container_width=True,key="journey_model_mape")
+    selected_row=ranking_focus[ranking_focus["Modelo"]==choice_model]
+    if selected_row.empty or not bool(selected_row.iloc[0]["Elegível"]):
+        st.warning("Modelo sem backtest elegível suficiente para este fechamento. "
+                   "A previsão poderá ficar indisponível; não serão inventadas probabilidades.")
+    else:
+        st.caption("Modelo escolhido: "+choice_model+" · MAPE exploratório "+
+                   str(selected_row.iloc[0]["MAPE (%)"])+"% · "+
+                   str(int(selected_row.iloc[0]["Previsões"]))+" pares comparáveis.")
+else:
+    st.warning("Sem histórico suficiente para um ranking comparável neste fechamento.")
+current_model=st.session_state["operational_"+choice_product]
+if current_model != choice_model:
+    st.info("Modelo atual: "+current_model+". Ao confirmar, a troca para "+choice_model+
+            " será registrada como **aprovação do planejador nesta sessão**.")
+st.caption("O teste com quatro candidatos é exploratório; não substitui o protocolo completo "
+           "de seleção dos modelos e a validação independente do TCC.")
+if st.button("Confirmar produto e modelo · analisar",type="primary",
+             key="journey_confirm",use_container_width=True):
+    if choice_model != st.session_state["operational_"+choice_product]:
+        approve_model(choice_product,choice_model,close)
+    st.session_state["active_journey"]=(scope,choice_product,choice_model)
+    st.session_state["selected_product"]=choice_product
+    st.session_state["detail_page"]="Nenhuma análise aberta"
+    st.rerun()
+
+if st.session_state.get("active_journey") != (scope,choice_product,choice_model):
+    st.info("Selecione o produto e o modelo e clique em **Confirmar produto e modelo · analisar** "
+            "para liberar as etapas 03 a 06. Se alterar qualquer escolha, confirme novamente.")
+    st.stop()
+
+chosen=choice_product
+st.session_state["selected_product"]=chosen
+st.success("Análise confirmada: "+chosen+" · modelo "+choice_model+
+           " · fechamento "+label(close)+".")
+# O motor é acionado apenas após a confirmação. Mantemos também os resultados
+# dos outros produtos para as análises de carteira e a validação avançada.
+method=st.session_state.get("simulation_method",DEFAULT_METHOD)
+persistent=bool(st.session_state.get("simulation_persistent",False))
+results={}
+for product in MODEL:
+    try:
+        results[product]=simulate(product,close,blocks,base,method,persistent,
+                  operational_model=st.session_state["operational_"+product])
+    except Exception as exc:
+        results[product]=None
+        errors[product]=str(exc)
+ready_count=sum(res is not None for res in results.values())
+with st.sidebar:
+    st.caption("Fechamento "+label(close)+" · Produto "+chosen+" · Modelo "+choice_model)
+    st.caption("Simulações disponíveis: "+str(ready_count)+"/"+str(len(MODEL)))
+    if results[chosen] is None:
+        st.warning(chosen+": "+errors.get(chosen,"Dados insuficientes"))
+observed=known(blocks[SHEETS[chosen]]["PV"],close)
+
 # 03 — A previsão é calculada mesmo quando a simulação do SKU não é elegível.
 journey_head("03", "Previsão mensal de demanda",
              "Exibir a projeção do modelo em uso e a referência Oficial para os próximos meses.")
@@ -760,7 +826,7 @@ if st.checkbox("Mostrar painel executivo completo",value=False,key="journey_show
         product=chosen,close=close,blocks=blocks,results=results,errors=errors,
         rankings=rankings,ready_count=ready_count,
         horizon=st.session_state.get("executive_horizon","6 meses"),
-        mode=st.session_state.get("executive_mode","Executivo"),
+        mode="Executivo",
         on_open_simulator=lambda: navigate("Impacto operacional",chosen),
         on_open_analytics=lambda: navigate("Previsão e modelos",chosen),
     )
