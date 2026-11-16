@@ -57,3 +57,33 @@ for product in ("P1","P2","P3"):
     assert (res["stock"]>=0).all()
     print(product,"forecast",fc.tolist(),"error bag",len(res["errors"]))
 print("SMOKE PASS")
+
+# Regressão: número de produtos não é limitado a três.
+for k in range(4, 7):
+    base.append([k, 70, 12])
+    names = [f"PRODUTO {k}", f"BENCH TESTE_{k}"]
+    for name in names:
+        ws = wb.create_sheet(name)
+        for kind in ("PV (SELL IN)", "PRODUÇÃO", "ESTOQUE"):
+            ws.append([kind])
+            ws.append(["Mes/Ano"] + [lab(m) for m in months])
+            ws.append(["Mes/Ano"] + ["Demanda + Plano DataM" for _ in months])
+            for review in revmonths:
+                if kind == "PV (SELL IN)":
+                    values = [22000*(1+0.02*i) for i in range(len(months))]
+                elif kind == "PRODUÇÃO":
+                    values = [28000 for _ in months]
+                else:
+                    values = [70000 for _ in months]
+                ws.append([lab(review)] + values)
+buf_multi = io.BytesIO()
+wb.save(buf_multi)
+base_multi, blocks_multi = load_data(buf_multi.getvalue())
+assert list(ns["SHEETS"]) == [f"P{i}" for i in range(1, 7)], ns["SHEETS"]
+assert all(p in base_multi for p in ns["SHEETS"])
+assert ns["MODEL"]["P4"] == "MEA"
+assert ns["ANALOG"]["P6"] == ["BENCH TESTE_6"]
+for product in ("P4", "P5", "P6"):
+    predicted = forecast(product, [origin+1, origin+2], origin, blocks_multi)
+    assert np.isfinite(predicted).all(), (product, predicted)
+print("UNLIMITED PRODUCTS PASS")
