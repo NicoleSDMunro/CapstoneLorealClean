@@ -71,19 +71,18 @@ div[data-testid="stAlert"] {border-radius:12px;}
 </style>
 """, unsafe_allow_html=True)
 
-NAV = ["Central de decisões", "Análise do produto", "Resultados e confiabilidade"]
-PRODUCT_VIEWS = ["Decisão e alternativas", "Riscos por mês", "Previsão × Oficial", "Simular lote específico"]
-RESULT_VIEWS = ["Valor demonstrado", "Validação por fechamento", "Metodologia e auditoria"]
-LEGACY_PRODUCT = {
-    "Impacto operacional": "Decisão e alternativas",
-    "Riscos de estoque": "Riscos por mês",
-    "Previsão e modelos": "Previsão × Oficial",
-    "Simulador de decisões": "Simular lote específico",
-}
-LEGACY_RESULTS = {
-    "Validação histórica dos alertas": "Validação por fechamento",
-    "Histórico e metodologia": "Metodologia e auditoria",
-}
+# Apenas uma página. Aprofundamentos são seções sob demanda, não abas laterais.
+DETAIL_PAGES = [
+    "Nenhuma análise aberta",
+    "Impacto operacional",
+    "Riscos de estoque",
+    "Previsão e modelos",
+    "Simulador de decisões",
+    "Valor demonstrado",
+    "Validação histórica dos alertas",
+    "Histórico e metodologia",
+    "Atualização mensal",
+]
 DEFAULT_METHOD = "Normal (0, s)"
 LIMIT_WARN = AVISO
 LIMIT_ALERT = ALERTA
@@ -98,20 +97,9 @@ def pct_cell(value):
 
 
 def navigate(page, product=None):
-    """Navegação compatível com os links da versão anterior, com 3 áreas visíveis."""
-    if page in LEGACY_PRODUCT:
-        st.session_state["nav_page"] = "Análise do produto"
-        st.session_state["product_view"] = LEGACY_PRODUCT[page]
-    elif page in LEGACY_RESULTS:
-        st.session_state["nav_page"] = "Resultados e confiabilidade"
-        st.session_state["results_view"] = LEGACY_RESULTS[page]
-    elif page == "Valor demonstrado":
-        st.session_state["nav_page"] = "Resultados e confiabilidade"
-        st.session_state["results_view"] = "Valor demonstrado"
-    elif page == "Atualização mensal" or page == "Visão geral":
-        st.session_state["nav_page"] = "Central de decisões"
-    else:
-        st.session_state["nav_page"] = page
+    """Abre um detalhamento na mesma página, sem abas ou navegação lateral."""
+    selected = page if page in DETAIL_PAGES else "Nenhuma análise aberta"
+    st.session_state["detail_page"] = selected
     if product is not None:
         st.session_state["selected_product"] = product
 
@@ -119,11 +107,93 @@ def navigate(page, product=None):
 def approve_model(product, new_model, close):
     old = st.session_state.get("operational_" + product, MODEL[product])
     st.session_state["operational_" + product] = new_model
+    scope = st.session_state.get("active_model_scope")
+    if scope is not None:
+        st.session_state.setdefault("approved_models_by_close", {})[(*scope, product)] = new_model
     st.session_state.setdefault("approvals", []).append({
         "Produto": product, "Fechamento": label(close),
         "Anterior": old, "Aprovado": new_model,
         "Registrado em (UTC)": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     })
+
+
+def model_review_table(rankings, errors, close):
+    """Resumo dinâmico dos SKUs: backtest histórico versus modelo em uso."""
+    st.markdown("#### 1 · Avaliação e seleção dos modelos de previsão")
+    st.caption(
+        "Recalculado para o fechamento " + label(close) +
+        ". O modelo com menor MAPE elegível é uma sugestão baseada no histórico; "
+        "o modelo utilizado nas previsões e simulações só muda após aprovação."
+    )
+    rows = []
+    for product in MODEL:
+        _, rank, winner = rankings.get(product, (pd.DataFrame(), pd.DataFrame(), None))
+        by_model = rank.set_index("Modelo") if not rank.empty else pd.DataFrame()
+        def mape(name):
+            if by_model.empty or name not in by_model.index:
+                return "—"
+            return f'{float(by_model.loc[name, "MAPE (%)"]):.1f}%'.replace(".", ",")
+        current = st.session_state["operational_" + product]
+        situation = (
+            "Sem evidência suficiente" if winner is None
+            else "Revisar mudança" if winner != current
+            else "Modelo mantido"
+        )
+        rows.append({
+            "Produto": product,
+            "MEA-P": mape("MEA-P"),
+            "MEA": mape("MEA"),
+            "Oficial": mape("Oficial"),
+            "Naive": mape("Naive"),
+            "Melhor MAPE elegível": winner or "—",
+            "Modelo em uso": current,
+            "Situação": situation,
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True,
+                 height=min(390, 39 * (len(rows) + 1) + 5))
+    attention = sum(1 for row in rows if row["Situação"] == "Revisar mudança")
+    st.caption(
+        f"{len(rows)} produto(s) analisado(s) · {attention} sugestão(ões) de revisão · "
+        "Todos os indicadores seguintes utilizam exclusivamente o modelo em uso."
+    )
+    with st.expander("Ver métricas completas e aprovar mudanças de modelo", expanded=False):
+        if st.session_state.get("review_model_product") not in MODEL:
+            st.session_state["review_model_product"] = next(iter(MODEL))
+        target = st.selectbox("Produto para revisar", list(MODEL), key="review_model_product")
+        detail, rank, winner = rankings.get(target, (pd.DataFrame(), pd.DataFrame(), None))
+        current = st.session_state["operational_" + target]
+        if rank.empty:
+            st.info("Sem previsões históricas comparáveis suficientes para classificar os modelos. " +
+                    errors.get("rank_" + target, ""))
+        else:
+            st.dataframe(rank, hide_index=True, use_container_width=True)
+            st.caption(
+                "MAPE, MAE, RMSE e viés são calculados sobre pares de origem/mês-alvo "
+                "comparáveis, com horizontes de 1 a 3 meses e sem usar vendas futuras "
+                "desconhecidas no fechamento analisado."
+            )
+            if winner is not None and winner != current:
+                st.warning(
+                    f"Melhor MAPE elegível: {winner}. Modelo em uso: {current}. "
+                    "Uma mudança exige revisão do planejador."
+                )
+                st.button("Aprovar uso de " + winner, type="primary",
+                          key="approve_from_review_" + target,
+                          on_click=approve_model, args=(target, winner, close))
+            elif winner is not None:
+                st.success("Modelo em uso coincide com o vencedor histórico elegível: " + current + ".")
+            else:
+                st.info("Não há modelo elegível suficiente para indicar mudança automática.")
+            if current != MODEL[target]:
+                st.button("Restaurar modelo inicial (" + MODEL[target] + ")",
+                          key="restore_from_review_" + target,
+                          on_click=approve_model, args=(target, MODEL[target], close))
+        st.caption(
+            "A comparação reduzida cobre MEA-P, MEA, Oficial e Naive, "
+            "quando aplicáveis. É exploratória e ainda requer homologação "
+            "frente aos 49 métodos/configurações do protocolo completo do TCC. "
+            "Este site não substitui a decisão do planejador."
+        )
 
 
 def update_uploaded_file(uploaded):
@@ -365,18 +435,9 @@ def scenario_plan(res, index, action):
     return plan
 
 
-if st.session_state.get("nav_page") not in NAV:
-    st.session_state["nav_page"] = NAV[0]
-if st.session_state.get("product_view") not in PRODUCT_VIEWS:
-    st.session_state["product_view"] = PRODUCT_VIEWS[0]
-if st.session_state.get("results_view") not in RESULT_VIEWS:
-    st.session_state["results_view"] = RESULT_VIEWS[0]
-
 with st.sidebar:
     st.markdown("## Smart Launch")
-    st.caption("L'Oréal | Decisões de abastecimento")
-    st.divider()
-    nav = st.radio("Navegação", NAV, key="nav_page", label_visibility="collapsed")
+    st.caption("L'Oréal | Apoio à decisão de abastecimento")
     st.divider()
     st.markdown("**Dados do fechamento**")
     uploaded_sidebar = st.file_uploader("Carregar / atualizar Triângulo", type=["xlsx"], key="sidebar_upload")
@@ -403,8 +464,7 @@ if "data_digest" not in st.session_state:
     st.session_state["data_digest"] = hashlib.sha256(file).hexdigest()
 if st.session_state.get("selected_product") not in MODEL:
     st.session_state["selected_product"] = next(iter(MODEL))
-for product in MODEL:
-    st.session_state.setdefault("operational_"+product, MODEL[product])
+# Modelos aprovados são restabelecidos após conhecer o arquivo e o fechamento.
 
 revisions = None
 for product, sheet in SHEETS.items():
@@ -417,46 +477,56 @@ if not revisions:
     st.error("Nenhuma revisão válida entre PV, produção e estoque dos produtos carregados. Confira a auditoria da base; não foram gerados alertas.")
     st.stop()
 
-if nav == "Central de decisões":
-    st.markdown('<p class="sl-kicker">CENTRAL DE DECISÕES DE ABASTECIMENTO · FECHAMENTO MENSAL</p>',
-                unsafe_allow_html=True)
-    st.title("Central de decisões")
-    st.caption("Central de decisões de lançamentos · riscos, prazos e alternativas para avaliação do planejador.")
-    filter_a, filter_b, filter_c, filter_d = st.columns([1.05,1.05,.9,1.1])
-    with filter_a:
-        st.selectbox("PRODUTO", list(MODEL), key="selected_product")
-    with filter_b:
-        st.selectbox("FECHAMENTO · REVISÃO DO PLANO", revisions,
-                     index=len(revisions)-1, format_func=label, key="selected_revision")
-    with filter_c:
-        st.selectbox("HORIZONTE", ["3 meses","6 meses","Todos"], index=1, key="executive_horizon")
-    with filter_d:
-        st.selectbox("VISÃO", ["Executivo","Planejador","Analista"],
-                     index=0, key="executive_mode")
-else:
-    with st.sidebar:
-        st.selectbox("Revisão do plano", revisions, index=len(revisions)-1,
-                     format_func=label, key="selected_revision")
-        st.selectbox("Produto analisado", list(MODEL), key="selected_product")
+st.markdown('<p class="sl-kicker">CENTRAL DE DECISÕES DE ABASTECIMENTO · FECHAMENTO MENSAL</p>',
+            unsafe_allow_html=True)
+st.title("Central de decisões")
+st.caption("Riscos, prazos e alternativas para avaliação do planejador · seleção de modelos auditável.")
+filter_a, filter_b, filter_c, filter_d = st.columns([1.05,1.05,.9,1.1])
+with filter_a:
+    st.selectbox("PRODUTO", list(MODEL), key="selected_product")
+with filter_b:
+    if st.session_state.get("selected_revision") not in revisions:
+        st.session_state["selected_revision"] = revisions[-1]
+    st.selectbox("FECHAMENTO · REVISÃO DO PLANO", revisions,
+                 index=len(revisions)-1, format_func=label, key="selected_revision")
+with filter_c:
+    st.selectbox("HORIZONTE", ["3 meses","6 meses","Todos"], index=1, key="executive_horizon")
+with filter_d:
+    st.selectbox("VISÃO", ["Executivo","Planejador","Analista"],
+                 index=0, key="executive_mode")
 review = st.session_state["selected_revision"]
 close = review - 1
 chosen = st.session_state["selected_product"]
+scope = (st.session_state["data_digest"], str(review))
+if scope != st.session_state.get("active_model_scope"):
+    approved = st.session_state.setdefault("approved_models_by_close", {})
+    for product in MODEL:
+        st.session_state["operational_" + product] = approved.get(
+            (*scope, product), MODEL[product]
+        )
+    st.session_state["active_model_scope"] = scope
 method = st.session_state.get("simulation_method", DEFAULT_METHOD)
 persistent = bool(st.session_state.get("simulation_persistent",False))
 
 results = {}
 errors = {}
 rankings = {}
+# 1) Avaliar modelos para TODOS os produtos antes de exibir ou simular os riscos.
 for product in MODEL:
     try:
         _detail, _rank, _winner = evaluate_models(product, close, blocks, forecast, known)
         rankings[product] = (_detail, _rank, _winner)
     except Exception as exc:
         rankings[product] = (pd.DataFrame(), pd.DataFrame(), None)
-        errors["rank_"+product] = str(exc)
+        errors["rank_" + product] = str(exc)
+
+model_review_table(rankings, errors, close)
+
+# 2) Usar somente o modelo operacional aprovado/retido no fechamento.
+for product in MODEL:
     try:
         results[product] = simulate(product, close, blocks, base, method, persistent,
-                                    operational_model=st.session_state["operational_"+product])
+                                    operational_model=st.session_state["operational_" + product])
     except Exception as exc:
         results[product] = None
         errors[product] = str(exc)
@@ -475,85 +545,31 @@ with st.sidebar:
                     st.write("**" + product + ":** " + errors.get(product, "Dados insuficientes"))
             st.caption("As vendas do mês m são recuperadas na revisão m+1. Pelo menos dois erros históricos são necessários para simular.")
 
-page = nav
-if nav == "Análise do produto":
-    st.title("Decisão de abastecimento · " + chosen)
-    st.caption("Fechamento " + label(close) + " · Modelo em uso: " +
-               st.session_state["operational_" + chosen] +
-               " · Resultados condicionais aos dados e às premissas do Triângulo.")
-    current = results[chosen]
-    if current is None:
-        st.warning("Não há probabilidade confiável para " + chosen +
-                   ": " + errors.get(chosen, "Evidência insuficiente"))
-        show_available_forecast(chosen, close, blocks)
-    else:
-        summary = card_summary(chosen, current, close)
-        frame_product = rows_from_sim(current)
-        active = frame_product[frame_product["Janela crítica"]]
-        ex_valid=active[active["Excesso (%)"].notna()]
-        ex_peak = ex_valid.loc[ex_valid["Excesso (%)"].idxmax()] if not ex_valid.empty else None
-        ru_peak = active.loc[active["Ruptura (%)"].idxmax()] if not active.empty else None
-        a,b,c = st.columns(3)
-        a.metric("Maior chance de excesso", chance_txt(ex_peak["Excesso (%)"]/100)
-                 if ex_peak is not None else "não avaliado")
-        b.metric("Maior chance de ruptura", chance_txt(ru_peak["Ruptura (%)"]/100)
-                 if ru_peak is not None else "não avaliado")
-        c.metric("Lotes futuros positivos", summary.get("future_lot_count", 0))
-        st.caption("**Produção e prazo:** " + summary["supply_note"])
-        if summary["alert"]:
-            st.info("**Próximo encaminhamento: " + summary["action"] + ".** " + summary["suggested"])
-            st.caption("Primeiro risco: " + summary["type"].lower() + " em " +
-                       label(summary["first_month"]) + " · Pico do mesmo tipo: " +
-                       f'{summary["peak_probability"]*100:.1f}%' +
-                       " em " + label(summary["peak_month"]) +
-                       ". Prazos calculados pelo prazo de fornecimento são teóricos.")
-        elif summary.get("warning"):
-            st.info("**Aviso: acompanhar.** "+summary["message"]+
-                    " Primeiro aviso: "+summary["warning_type"].lower()+" em "+
-                    label(summary["warning_month"])+".")
-        else:
-            st.info("Sem alerta ou aviso na janela crítica; reavaliar mensalmente.")
-        st.caption(CHANCE_NOTE)
-        if ex_peak is not None and ru_peak is not None:
-            st.caption("Excesso: pico em " + str(ex_peak["Mês"]) +
-                       " · Ruptura: pico em " + str(ru_peak["Mês"]) +
-                       ". Podem ocorrer em meses diferentes ou em cenários distintos.")
-    selection = st.radio("O que deseja avaliar?", PRODUCT_VIEWS,
-                         key="product_view", horizontal=True)
-    page = {
-        "Decisão e alternativas": "Impacto operacional",
-        "Riscos por mês": "Riscos de estoque",
-        "Previsão × Oficial": "Previsão e modelos",
-        "Simular lote específico": "Simulador de decisões",
-    }[selection]
-elif nav == "Resultados e confiabilidade":
-    st.title("Resultados e confiabilidade")
-    st.caption("Evidências do TCC, limitações e histórico reconstruído — sem confundir simulação com ganho realizado.")
-    choice = st.radio("O que deseja consultar?", RESULT_VIEWS,
-                      key="results_view", horizontal=True)
-    page = {
-        "Valor demonstrado": "Valor demonstrado",
-        "Validação por fechamento": "Validação histórica dos alertas",
-        "Metodologia e auditoria": "Histórico e metodologia",
-    }[choice]
-else:
-    page = "Visão geral"
+# Central única: recomendação e indicadores sempre na página principal.
+render_executive_dashboard(
+    product=chosen,
+    close=close,
+    blocks=blocks,
+    results=results,
+    errors=errors,
+    rankings=rankings,
+    ready_count=ready_count,
+    horizon=st.session_state.get("executive_horizon", "6 meses"),
+    mode=st.session_state.get("executive_mode", "Executivo"),
+    on_open_simulator=lambda: navigate("Impacto operacional", chosen),
+    on_open_analytics=lambda: navigate("Previsão e modelos", chosen),
+)
+st.divider()
+st.markdown("### Análises e evidências detalhadas")
+st.caption("A Central de decisões permanece visível. Abra apenas o detalhamento necessário, sem navegar entre abas.")
+if st.session_state.get("detail_page") not in DETAIL_PAGES:
+    st.session_state["detail_page"] = DETAIL_PAGES[0]
+page = st.selectbox("EXPLORAR DETALHES", DETAIL_PAGES, key="detail_page")
+if page != DETAIL_PAGES[0]:
+    st.markdown("#### " + page + " · " + chosen)
 
-if page == "Visão geral":
-    render_executive_dashboard(
-        product=chosen,
-        close=close,
-        blocks=blocks,
-        results=results,
-        errors=errors,
-        rankings=rankings,
-        ready_count=ready_count,
-        horizon=st.session_state.get("executive_horizon", "6 meses"),
-        mode=st.session_state.get("executive_mode", "Executivo"),
-        on_open_simulator=lambda: navigate("Impacto operacional", chosen),
-        on_open_analytics=lambda: navigate("Previsão e modelos", chosen),
-    )
-
+if page == DETAIL_PAGES[0]:
+    pass
 elif page == "Atualização mensal":
     st.subheader("Auditoria da base enviada")
     st.success("Estrutura básica do Triângulo reconhecida: " + file_name)
