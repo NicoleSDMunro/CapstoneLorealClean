@@ -418,20 +418,20 @@ if not revisions:
     st.stop()
 
 if nav == "Central de decisões":
-    st.markdown('<p class="sl-kicker">SUPPLY CHAIN DECISION CENTER · MONTHLY CLOSING</p>',
+    st.markdown('<p class="sl-kicker">CENTRAL DE DECISÕES DE ABASTECIMENTO · FECHAMENTO MENSAL</p>',
                 unsafe_allow_html=True)
     st.title("Central de decisões")
-    st.caption("Launch Decision Center · Risco, timing e alternativas para revisão do planner.")
+    st.caption("Central de decisões de lançamentos · riscos, prazos e alternativas para avaliação do planejador.")
     filter_a, filter_b, filter_c, filter_d = st.columns([1.05,1.05,.9,1.1])
     with filter_a:
-        st.selectbox("PRODUCT", list(MODEL), key="selected_product")
+        st.selectbox("PRODUTO", list(MODEL), key="selected_product")
     with filter_b:
-        st.selectbox("CLOSING · PLAN REVISION", revisions,
+        st.selectbox("FECHAMENTO · REVISÃO DO PLANO", revisions,
                      index=len(revisions)-1, format_func=label, key="selected_revision")
     with filter_c:
-        st.selectbox("HORIZON", ["3M","6M","All"], index=1, key="executive_horizon")
+        st.selectbox("HORIZONTE", ["3 meses","6 meses","Todos"], index=1, key="executive_horizon")
     with filter_d:
-        st.selectbox("VIEW", ["Executive","Planner","Analyst"],
+        st.selectbox("VISÃO", ["Executivo","Planejador","Analista"],
                      index=0, key="executive_mode")
 else:
     with st.sidebar:
@@ -548,8 +548,8 @@ if page == "Visão geral":
         errors=errors,
         rankings=rankings,
         ready_count=ready_count,
-        horizon=st.session_state.get("executive_horizon", "6M"),
-        mode=st.session_state.get("executive_mode", "Executive"),
+        horizon=st.session_state.get("executive_horizon", "6 meses"),
+        mode=st.session_state.get("executive_mode", "Executivo"),
         on_open_simulator=lambda: navigate("Impacto operacional", chosen),
         on_open_analytics=lambda: navigate("Previsão e modelos", chosen),
     )
@@ -590,7 +590,7 @@ elif page == "Atualização mensal":
 
 elif page == "Previsão e modelos":
     st.subheader("Previsão e modelos")
-    st.write("Reavaliar mensalmente o erro histórico sem alterar silenciosamente a previsão operacional.")
+    st.write("Reavaliar mensalmente o erro histórico sem mudar a previsão operacional sem aprovação.")
     product=chosen
     detail,ranking,winner=rankings[product]
     operational=st.session_state["operational_"+product]
@@ -598,7 +598,7 @@ elif page == "Previsão e modelos":
     m1.metric("Produto analisado",product)
     m2.metric("Modelo em uso",operational)
     m3.metric("Melhor no backtest atual",winner or "Não elegível")
-    st.caption("Comparação experimental: MEA-P, MEA, Oficial e Naive nos mesmos pares origem/alvo, h1–h3.")
+    st.caption("Comparação experimental: MEA-P, MEA, Oficial e Naive nos mesmos pares de origem e mês-alvo, horizontes de 1 a 3 meses.")
     if ranking.empty:
         st.warning("Não há pares comparáveis suficientes para determinar um vencedor neste fechamento.")
     else:
