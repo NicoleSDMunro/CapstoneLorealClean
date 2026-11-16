@@ -60,7 +60,7 @@ print("SMOKE PASS")
 
 # Regressão: número de produtos não é limitado a três.
 for k in range(4, 7):
-    base.append([k, 70, 12])
+    wb["Base"].append([k, 70, 12])
     names = [f"PRODUTO {k}", f"BENCH TESTE_{k}"]
     for name in names:
         ws = wb.create_sheet(name)
