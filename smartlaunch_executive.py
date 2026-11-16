@@ -93,7 +93,7 @@ def _percent(v):
 
 def _future(res, horizon):
     total = len(res["months"])
-    return min(total, 3 if horizon == "3M" else 6 if horizon == "6M" else total)
+    return min(total, 3 if horizon == "3 meses" else 6 if horizon == "6 meses" else total)
 
 
 def _risk_frame(res, count):
