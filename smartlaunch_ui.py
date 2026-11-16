@@ -460,8 +460,12 @@ except Exception as exc:
     st.caption("Esperado: aba Base, uma ou mais abas PRODUTO N e, quando aplicável, abas BENCH NOME_N.")
     st.stop()
 
-if "data_digest" not in st.session_state:
-    st.session_state["data_digest"] = hashlib.sha256(file).hexdigest()
+# O hash precisa refletir os bytes efetivamente carregados, inclusive em testes
+# e atualizações de fonte que não passam pelo componente de upload.
+current_digest = hashlib.sha256(file).hexdigest()
+if st.session_state.get("data_digest") != current_digest:
+    st.session_state["data_digest"] = current_digest
+    st.session_state.pop("active_model_scope", None)
 if st.session_state.get("selected_product") not in MODEL:
     st.session_state["selected_product"] = next(iter(MODEL))
 # Modelos aprovados são restabelecidos após conhecer o arquivo e o fechamento.
@@ -505,6 +509,12 @@ if scope != st.session_state.get("active_model_scope"):
             (*scope, product), MODEL[product]
         )
     st.session_state["active_model_scope"] = scope
+# Garante inicialização também quando a lista de produtos mudar durante a sessão.
+for product in MODEL:
+    st.session_state.setdefault(
+        "operational_" + product,
+        st.session_state["approved_models_by_close"].get((*scope, product), MODEL[product])
+    )
 method = st.session_state.get("simulation_method", DEFAULT_METHOD)
 persistent = bool(st.session_state.get("simulation_persistent",False))
 
