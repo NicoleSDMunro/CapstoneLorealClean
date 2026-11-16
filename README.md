@@ -1,3 +1,21 @@
+# Interface Smart Launch — seleção guiada e identidade visual — 16/11/2026
+
+**Experiência principal (uma página, sem abas):**
+
+1. Fazer upload do Triângulo no painel lateral e escolher a revisão do plano.
+2. Conferir a auditoria dos dados e a comparação de MAPE de todos os produtos (MEA-P, MEA, Oficial e Naive, onde aplicáveis).
+3. **Depois do ranking**, escolher o **produto** e o **modelo** nos dois seletores e clicar em **Confirmar produto e modelo · analisar**.
+4. Somente após essa confirmação aparecem previsão, simulação (1.000 trajetórias, se há erros históricos), riscos de excesso/ruptura e comparação de lotes. A mudança do produto, modelo, arquivo ou revisão exige nova confirmação.
+5. Opcionalmente, abrir o painel executivo completo e os relatórios históricos sem mudar a metodologia de cálculo.
+
+A escolha humana do modelo atualiza o modelo operacional de seu produto **somente na sessão e revisão selecionadas**, registra a mudança no histórico da sessão e recalcula a previsão, a sacola de erros simulados, as probabilidades de risco e os cenários de produção. Ranking com quatro modelos é exploratório e não é apresentado como validação independente ou equivalência ao conjunto completo do notebook.
+
+**Identidade visual:** tema único de fundo cinza-claro, cards brancos, títulos azul-marinho, ações em azul-petróleo, avisos âmbar e riscos vermelhos. Controles, cabeçalhos, gráficos e tabelas das seis etapas seguem a mesma hierarquia. A antiga folha de estilo concorrente do painel executivo foi substituída por estilos restritos aos componentes executivos.
+
+**Arquivos alterados:** smartlaunch_ui.py, smartlaunch_executive.py, smartlaunch_visuals.py, .streamlit/config.toml e tests/test_ui.py. A aplicação continua com motor de estoque/risco compartilhado, sem criar uma previsão ou metodologia paralela. Os testes de interface verificam o bloqueio das etapas 03–06 até confirmação, a aprovação de um modelo diferente e a invalidação da seleção após alteração dos dados.
+
+---
+
 # Navegação em seis etapas — 16/11/2026
 
 A página principal do Streamlit agora percorre sequencialmente o mesmo fluxo do motor Python, **sem novas abas**:
