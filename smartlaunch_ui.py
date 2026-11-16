@@ -395,11 +395,13 @@ try:
     base, blocks = load_data(file)
 except Exception as exc:
     st.error("Não foi possível validar o arquivo: " + str(exc))
-    st.caption("Esperado: Base, PRODUTO 1–3 e respectivas abas BENCH do Triângulo V2.")
+    st.caption("Esperado: aba Base, uma ou mais abas PRODUTO N e, quando aplicável, abas BENCH NOME_N.")
     st.stop()
 
 if "data_digest" not in st.session_state:
     st.session_state["data_digest"] = hashlib.sha256(file).hexdigest()
+if st.session_state.get("selected_product") not in MODEL:
+    st.session_state["selected_product"] = next(iter(MODEL))
 for product in MODEL:
     st.session_state.setdefault("operational_"+product, MODEL[product])
 
@@ -411,7 +413,7 @@ for product, sheet in SHEETS.items():
     revisions = valid if revisions is None else revisions & valid
 revisions = sorted(revisions or [])
 if not revisions:
-    st.error("Nenhuma revisão comum entre PV, produção e estoque para os três produtos. Confira a auditoria da base; não foram gerados alertas.")
+    st.error("Nenhuma revisão comum entre PV, produção e estoque dos produtos carregados. Confira a auditoria da base; não foram gerados alertas.")
     st.stop()
 
 with st.sidebar:
