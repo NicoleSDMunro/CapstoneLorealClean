@@ -21,6 +21,18 @@ for label_name in ("PRODUTO", "FECHAMENTO · REVISÃO DO PLANO",
 assert any("Avaliação e seleção dos modelos" in str(x.value) for x in at.markdown), (
     "Resumo dos modelos deve ficar antes dos indicadores"
 )
+# As seis etapas aparecem na mesma página, sem alternância de abas.
+for stage in (
+    "Dados e diagnóstico",
+    "Avaliação e seleção dos modelos",
+    "Previsão mensal de demanda",
+    "Incerteza e evolução do estoque",
+    "Risco de excesso e prazo para agir",
+    "Alternativas e decisão do planejador",
+):
+    assert any(stage in str(x.value) for x in at.markdown), stage
+assert any("Da planilha à decisão" in str(x.value) for x in at.markdown)
+
 assert not any(r.label in ("Navegação", "O que deseja avaliar?", "O que deseja consultar?")
                for r in at.radio)
 
