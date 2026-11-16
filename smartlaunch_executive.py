@@ -97,13 +97,13 @@ def _future(res, horizon):
 
 
 def _risk_frame(res, count):
-    months = res["months"][:count]
+    meses = res["months"][:count]
     active = np.asarray(res["active"][:count], dtype=bool)
     evaluated = np.asarray(res.get("evaluated", np.ones(len(res["months"]), bool))[:count], dtype=bool)
     ex = np.mean(np.asarray(res["cov"][:, :count]) >= LIM, axis=0)*100
     ru = np.mean(np.asarray(res["lost"][:, :count]) > 0, axis=0)*100
     ex[~evaluated] = np.nan
-    return pd.DataFrame({"Mês":[label(m) for m in months],
+    return pd.DataFrame({"Mês":[label(m) for m in meses],
                          "Período":months, "Excesso":ex, "Ruptura":ru,
                          "Crítica":active, "Avaliável":evaluated})
 
@@ -138,13 +138,13 @@ def _coverage_plot(res,count):
         values.append(float(np.median(finite)) if len(finite) and is_evaluated else None)
     chart=go.Figure()
     chart.add_trace(go.Scatter(
-        x=xs,y=values,mode="lines+markers",name="Median forward cover",
+        x=xs,y=values,mode="lines+markers",name="Cobertura futura mediana",
         line=dict(color="#2563EB",width=3),marker=dict(size=7),
         fill="tozeroy",fillcolor="rgba(37,99,235,.065)",
-        hovertemplate="%{x}<br>Median cover: %{y:.0f} days<extra></extra>"
+        hovertemplate="%{x}<br>Cobertura mediana: %{y:.0f} dias<extra></extra>"
     ))
     chart.add_hline(y=LIM,line_color="#DC2626",line_dash="dash",line_width=1.3,
-                    annotation_text=str(LIM)+"-day operational threshold",
+                    annotation_text=str(LIM)+" dias · limite operacional",
                     annotation_position="top left",annotation_font_size=10)
     chart.update_layout(
         template="plotly_white",height=158,margin=dict(l=5,r=8,t=3,b=13),
@@ -158,28 +158,28 @@ def _coverage_plot(res,count):
 
 def _headline(summary,valid):
     if not valid:
-        return "Simulation unavailable", "Review missing evidence before acting", "Planner review required"
+        return "Simulação indisponível", "Revise os dados disponíveis antes de considerar qualquer ação", "Revisão do planejador necessária"
     if summary["alert"]:
         risk=summary["type"].lower()
         first=label(summary["first_month"])
-        title="High "+("excess" if risk=="excesso" else "stockout")+" risk detected"
+        title="Alto risco de "+("excesso" if risk=="excesso" else "ruptura")+" identificado"
         if summary["first_target_has_changeable_lot"]:
-            return title, ("Risk indicated for "+first+". A relevant production lot has a theoretical "
-                           "change window; verify the supplier cut-off before comparing interventions."), "Evaluate supply alternatives"
+            return title, ("Risco identificado para "+first+". Existe um lote de produção relevante com uma janela teórica para "
+                           "alteração; confirme a data de corte com o fornecedor antes de comparar intervenções."), "Avaliar alternativas de abastecimento"
         if risk=="excesso":
-            return title, ("Risk indicated for "+first+". No relevant lot is changeable "
-                           "within the theoretical lead-time window; review commercial actions and monitor."), "Commercial action + monitoring"
-        return title, ("Risk indicated for "+first+". No relevant lot is changeable "
-                       "before the event; review allocations and exceptions with Supply Chain."), "Review allocation + exceptions"
+            return title, ("Risco identificado para "+first+". Não há lote relevante alterável "
+                           "dentro da janela teórica de lead time; avalie ações comerciais e mantenha o monitoramento."), "Ação comercial + monitoramento"
+        return title, ("Risco identificado para "+first+". Não há lote relevante alterável "
+                       "antes do evento; avalie a realocação e eventuais exceções com Supply Chain."), "Rever alocação e exceções"
     if summary.get("warning"):
-        return "Early warning — monitor",("Model-based warning indicated for "+
-                label(summary["warning_month"])+". Reassess at the next closing."),"Monitor next closing"
-    return "No alert in the critical window", "No threshold alert was detected in the evaluated months. Continue monthly monitoring.", "Continue monitoring"
+        return "Aviso antecipado — acompanhar",("Aviso baseado no modelo para "+
+                label(summary["warning_month"])+". Reavalie no próximo fechamento."),"Acompanhar próximo fechamento"
+    return "Nenhum alerta na janela crítica", "Não houve alerta acima do limiar nos meses avaliados. Continue o monitoramento mensal.", "Manter monitoramento"
 
 
 def _decision_trail(summary, res, close, count):
     if not summary or res is None: return
-    st.markdown("#### WHY THIS RECOMMENDATION?")
+    st.markdown("#### POR QUE ESSA RECOMENDAÇÃO?")
     lots=future_lots(res,close)
     lead=int(res["ltm"])
     peak = summary.get("peak_probability") if summary.get("alert") else summary.get("warning_probability")
@@ -188,28 +188,28 @@ def _decision_trail(summary, res, close, count):
         month=summary["first_month"]
         usable=[x for x in lots if x["month"]<=month and x["available_for_analysis"]]
         deadline=label(summary["deadline"]) if summary["deadline"] is not None else "—"
-        assessment=("Theoretical change window for "+str(len(usable))+" lot(s)"
-                    if usable else "No relevant changeable lot before first risk")
+        assessment=("Janela teórica de alteração para "+str(len(usable))+" lote(s)"
+                    if usable else "Nenhum lote relevante alterável antes do primeiro risco")
         rows=[
-            ("01 / RISK", summary["type"]+" · "+_percent(100*peak), "Simulated conditional risk, not a calibrated true probability."),
-            ("02 / TIMING", first,"First threshold alert in the critical decision window."),
-            ("03 / ACTIONABILITY", assessment,
-             str(lead)+"-month rounded lead time; theoretical cut-off "+deadline+". Supplier confirmation required."),
-            ("04 / ALTERNATIVES", "Review supply / commercial responses",
-             "Compare interventions only when relevant lots remain within a theoretical window."),
-            ("05 / TRADE-OFF", "Excess avoided versus lost sales",
-             "Evaluate fill rate, shortage risk and inventory under identical demand scenarios."),
-            ("06 / RECOMMENDATION", _headline(summary,True)[2],
-             "Planner review required before any operational change."),
+            ("01 / RISCO", summary["type"]+" · "+_percent(100*peak), "Probabilidade condicional simulada, sem calibração comprovada."),
+            ("02 / MOMENTO", first,"Primeiro alerta acima do limiar na janela crítica."),
+            ("03 / POSSIBILIDADE DE AÇÃO", assessment,
+             str(lead)+" mês(es) de lead time arredondado; mês-limite teórico "+deadline+". Confirmação do fornecedor necessária."),
+            ("04 / ALTERNATIVAS", "Avaliar medidas de abastecimento e comerciais",
+             "Compare intervenções apenas quando houver lotes relevantes ainda dentro da janela teórica."),
+            ("05 / EQUILÍBRIO ENTRE RISCOS", "Excesso evitado versus vendas perdidas",
+             "Compare taxa de atendimento, risco de ruptura e estoque com os mesmos cenários de demanda."),
+            ("06 / RECOMENDAÇÃO", _headline(summary,True)[2],
+             "Revisão do planejador necessária before any operational change."),
         ]
     else:
         rows=[
-            ("01 / RISK","No critical risk signal","No alert above the exploratory 20% trigger."),
-            ("02 / TIMING","Next monthly closing","Monitor changes as actual demand becomes available."),
-            ("03 / ACTIONABILITY","No intervention proposed","Do not manufacture a decision when evidence is insufficient."),
-            ("04 / ALTERNATIVES","Maintain plan / revisit","Explore alternatives only if new evidence warrants."),
-            ("05 / TRADE-OFF","Monitor service and inventory","Avoid unsupported claims of improvement."),
-            ("06 / RECOMMENDATION","Planner review required","Decision remains with the planner."),
+            ("01 / RISCO","Sem sinal de risco crítico","Nenhum alerta acima do gatilho exploratório de 20%."),
+            ("02 / MOMENTO","Próximo fechamento mensal","Acompanhe as mudanças conforme a demanda real for conhecida."),
+            ("03 / POSSIBILIDADE DE AÇÃO","Nenhuma intervenção proposta","Não apresente decisões sem evidências suficientes."),
+            ("04 / ALTERNATIVAS","Manter plano / reavaliar","Examine alternativas apenas se surgirem novas evidências."),
+            ("05 / EQUILÍBRIO ENTRE RISCOS","Monitorar atendimento e estoque","Não afirmar melhorias sem evidências."),
+            ("06 / RECOMENDAÇÃO","Revisão do planejador necessária","A decisão final permanece com o planejador."),
         ]
     left,right=st.columns(2)
     for i,(stage,title,detail) in enumerate(rows):
@@ -229,37 +229,37 @@ def render_executive_dashboard(
     res=results.get(product)
     summary=card_summary(product,res,close) if res is not None else None
     title,reason,response=_headline(summary,res is not None)
-    caption=(f"{product} · Closing {label(close)} · "+
-             ("Conditional probability from simulated scenarios" if res is not None
-              else "Probability unavailable — missing simulated scenarios"))
-    st.markdown('<div class="sl-reco"><div><div class="sl-tag">SMART LAUNCH RECOMMENDATION · DECISION SUPPORT</div>'+
+    caption=(f"{product} · Fechamento {label(close)} · "+
+             ("Probabilidade condicional baseada em cenários simulados" if res is not None
+              else "Probabilidade indisponível — faltam cenários simulados"))
+    st.markdown('<div class="sl-reco"><div><div class="sl-tag">RECOMENDAÇÃO SMART LAUNCH · APOIO À DECISÃO</div>'+
                 '<h2>'+html.escape(title)+'</h2><p>'+html.escape(reason)+
                 '</p><p>'+html.escape(caption)+'</p></div>'+
-                '<div class="sl-response"><div class="sl-tag">RECOMMENDED RESPONSE</div>'+
-                '<h3>'+html.escape(response)+'</h3><small>Planner review required<br>'+
-                'Admissible only under current assumptions</small></div></div>',
+                '<div class="sl-response"><div class="sl-tag">ENCAMINHAMENTO SUGERIDO</div>'+
+                '<h3>'+html.escape(response)+'</h3><small>Revisão do planejador necessária<br>'+
+                'Admissível apenas sob as premissas atuais</small></div></div>',
                 unsafe_allow_html=True)
-    st.markdown('<div class="sl-process"><b>RISK</b> &nbsp;→&nbsp; TIMING &nbsp;→&nbsp; '+
-                'ACTIONABILITY &nbsp;→&nbsp; ALTERNATIVES &nbsp;→&nbsp; TRADE-OFF '+
-                '&nbsp;→&nbsp; <b>RECOMMENDATION</b></div>',unsafe_allow_html=True)
+    st.markdown('<div class="sl-process"><b>RISCO</b> &nbsp;→&nbsp; MOMENTO &nbsp;→&nbsp; '+
+                'POSSIBILIDADE DE AÇÃO &nbsp;→&nbsp; ALTERNATIVAS &nbsp;→&nbsp; TRADE-OFF '+
+                '&nbsp;→&nbsp; <b>RECOMENDAÇÃO</b></div>',unsafe_allow_html=True)
     if res is not None:
-        supplier_window=("First risk: "+label(summary["first_month"]) if summary.get("alert")
-                         else "No critical alert")
-        supplier_deadline=("Estimated lot deadline: "+label(summary["deadline"])
+        supplier_window=("Primeiro risco: "+label(summary["first_month"]) if summary.get("alert")
+                         else "Sem alerta crítico")
+        supplier_deadline=("Mês-limite estimado do lote: "+label(summary["deadline"])
                            if summary.get("alert") and summary.get("deadline") is not None
-                           else "No relevant lot deadline")
+                           else "Nenhum prazo de lote relevante")
         st.markdown('<div class="sl-subline"><span><b>'+html.escape(supplier_window)+
                     '</b></span><span>'+html.escape(supplier_deadline)+
-                    '</span><span>Supplier lead time: '+str(res["ltm"])+
-                    ' rounded months</span></div>',unsafe_allow_html=True)
-    st.markdown('<div class="sl-section">EXECUTIVE KPIs</div>',unsafe_allow_html=True)
+                    '</span><span>Lead time do fornecedor: '+str(res["ltm"])+
+                    ' meses arredondados</span></div>',unsafe_allow_html=True)
+    st.markdown('<div class="sl-section">INDICADORES EXECUTIVOS</div>',unsafe_allow_html=True)
     if res is None:
-        st.info("Decision Support is incomplete for "+product+": "+errors.get(product,"Insufficient forecast errors")+
-                ". Missing simulation is not zero risk.")
+        st.info("O apoio à decisão está incompleto para "+product+": "+errors.get(product,"Erros históricos de previsão insuficientes")+
+                ". Simulação indisponível não significa risco zero.")
         row=st.columns(5)
-        for col,key in zip(row,("Excess risk","Median cover","Forecast error","Actionable lots","Fill rate")):
+        for col,key in zip(row,("Risco de excesso","Cobertura mediana","Erro de previsão","Lotes com prazo teórico","Taxa de atendimento")):
             col.metric(key,"—")
-        st.button("Inspect evidence",on_click=on_open_analytics)
+        st.button("Ver evidências",on_click=on_open_analytics)
         return
     count=_future(res,horizon)
     whole=_risk_frame(res,len(res["months"]))
@@ -289,29 +289,29 @@ def render_executive_dashboard(
     except (ValueError,KeyError,IndexError):
         service=None
     cols=st.columns(5)
-    cols[0].metric("Excess risk · peak",_percent(peak_ex),help="Highest model-based monthly excess probability within the critical window.")
-    cols[1].metric("Median cover · first risk",(_number(median_cover)+" d") if median_cover is not None else "—",
-                   help="Projected median forward cover at the first alerted month, or first evaluable month.")
-    cols[2].metric("Forecast error · MAPE",_percent(accuracy["mape_operacional"]) if accuracy else "—",
-                   help="Rolling historical MAPE for comparable origin/target pairs. This is not the fixed TCC summary.")
-    cols[3].metric("Actionable lots · theoretical",str(len(actionable)),help="Lot deadlines based on rounded monthly lead time, not a contract authorization.")
-    cols[4].metric("Fill rate · simulated",_percent(service),help="Scenario-based service within the model critical window; not observed service.")
+    cols[0].metric("Risco de excesso · pico",_percent(peak_ex),help="Maior probabilidade mensal simulada de excesso na janela crítica.")
+    cols[1].metric("Cobertura mediana · primeiro risco",(_number(median_cover)+" d") if median_cover is not None else "—",
+                   help="Cobertura futura mediana no primeiro mês com alerta ou no primeiro mês avaliável.")
+    cols[2].metric("Erro de previsão · MAPE",_percent(accuracy["mape_operacional"]) if accuracy else "—",
+                   help="MAPE histórico com pares comparáveis de origem e mês-alvo. Não é o resumo fixo do TCC.")
+    cols[3].metric("Lotes com prazo teórico · teóricos",str(len(actionable)),help="Prazos estimados pelo lead time mensal arredondado; não representam autorização contratual.")
+    cols[4].metric("Taxa de atendimento · simulada",_percent(service),help="Atendimento projetado nos cenários da janela crítica, não atendimento real observado.")
     if accuracy is not None:
-        st.markdown('<div class="sl-subline"><span>Official MAPE: <strong>'+
+        st.markdown('<div class="sl-subline"><span>MAPE oficial: <strong>'+
                     html.escape(_percent(accuracy["mape_oficial"]))+
-                    '</strong></span><span>Comparisons: '+str(accuracy["pares"])+
-                    ' matched forecast points</span><span>Models are not automatically changed</span></div>',
+                    '</strong></span><span>Comparações: '+str(accuracy["pares"])+
+                    ' previsões comparáveis</span><span>Os modelos não são alterados automaticamente</span></div>',
                     unsafe_allow_html=True)
     else:
-        st.markdown('<div class="sl-subline">Forecast error unavailable for this closing; no comparative superiority is inferred.</div>',
+        st.markdown('<div class="sl-subline">Erro de previsão unavailable for this closing; no comparative superiority is inferred.</div>',
                     unsafe_allow_html=True)
 
-    st.markdown('<div class="sl-section">DEMAND &amp; RISK OUTLOOK</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sl-section">DEMANDA E RISCO PROJETADOS</div>',unsafe_allow_html=True)
     c1,c2=st.columns([1.65,1],gap="medium")
     with c1:
-        st.markdown('<div class="sl-panel-title">DEMAND FORECAST</div>',unsafe_allow_html=True)
+        st.markdown('<div class="sl-panel-title">PREVISÃO DE DEMANDA</div>',unsafe_allow_html=True)
         realized=known(blocks[SHEETS[product]]["PV"],close)
-        months=res["months"][:count]
+        meses=res["months"][:count]
         try:
             official=forecast(product,months,close,blocks,model="Oficial")
         except (ValueError,KeyError,IndexError,TypeError):
@@ -328,34 +328,34 @@ def render_executive_dashboard(
             if trace.name=="Previsão Oficial":trace.line.color="#71849a"
         st.plotly_chart(fig,use_container_width=True)
     with c2:
-        st.markdown('<div class="sl-panel-title">RISK MONITOR</div>',unsafe_allow_html=True)
+        st.markdown('<div class="sl-panel-title">MONITOR DE RISCOS</div>',unsafe_allow_html=True)
         st.plotly_chart(_risk_plot(_risk_frame(res,count)),use_container_width=True)
-    st.markdown('<div class="sl-subline"><span>Forecast interval: simulated P2.5–P97.5, not calibrated</span>'+
-                '<span>Risk = conditional scenario frequency</span>'+
-                '<span>Alert trigger &gt;20%; watch &gt;2.5% (exploratory)</span></div>',
+    st.markdown('<div class="sl-subline"><span>Faixa de previsão: P2,5–P97,5 simulados, sem calibração comprovada</span>'+
+                '<span>Risco = frequência condicional nos cenários</span>'+
+                '<span>Alerta &gt;20%; aviso &gt;2,5% (limiares exploratórios)</span></div>',
                 unsafe_allow_html=True)
-    st.markdown('<div class="sl-section">INVENTORY COVERAGE OUTLOOK</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sl-section">PROJEÇÃO DE COBERTURA DE ESTOQUE</div>',unsafe_allow_html=True)
     st.plotly_chart(_coverage_plot(res,count),use_container_width=True)
-    st.markdown('<div class="sl-subline"><span>180 days = operational threshold, not a universal statistical cut-off</span>'+
-                '<span>Missing forward cover is not zero risk</span>'+
-                '<span>Initial inventory: '+_number(float(res["e0"]))+' units</span>'+
-                '<span>Rounded supplier LT: '+str(res["ltm"])+' months</span></div>',
+    st.markdown('<div class="sl-subline"><span>180 dias = limite operacional, não um corte estatístico universal</span>'+
+                '<span>Cobertura não avaliável não significa risco zero</span>'+
+                '<span>Estoque inicial: '+_number(float(res["e0"]))+' unidades</span>'+
+                '<span>Lead time arredondado: '+str(res["ltm"])+' meses</span></div>',
                 unsafe_allow_html=True)
 
     st.divider()
-    st.markdown("### Decision Simulator")
-    st.caption("Below the executive fold · same "+str(N)+" simulated demand scenarios for each intervention. "+
-               "Changes are hypothetical until supplier, commercial and planner approval.")
+    st.markdown("### Simulador de decisões")
+    st.caption("Detalhamento operacional · os mesmos "+str(N)+" cenários simulados de demanda em cada intervenção. "+
+               "As mudanças são hipotéticas até validação do fornecedor, comercial e planejador.")
     editable=editable_lots(res,close)
     if not editable:
-        st.info("No theoretically editable production lot in this closing. "
+        st.info("Não há lote de produção teoricamente alterável neste fechamento. "
                 +supply_diagnosis(res,close)["guidance"]+
-                " Consider commercial response and inventory reallocation; do not simulate cancelling a nonexistent lot.")
+                " Considere ação comercial e realocação de estoque; não simule o cancelamento de um lote inexistente.")
     else:
         preferred=next((x for x in editable if first_alert is not None and x["month"]<=first_alert),editable[0])
         a,b,c=st.columns([1,1,1.5])
         with a:
-            lot_idx=st.selectbox("LOT · delivery month",options=[x["index"] for x in editable],
+            lot_idx=st.selectbox("LOTE · mês de entrega",options=[x["index"] for x in editable],
                                  format_func=lambda i:label(res["months"][i]),
                                  index=[x["index"] for x in editable].index(preferred["index"]),
                                  key="exec_lot")
@@ -363,21 +363,21 @@ def render_executive_dashboard(
             candidates=[i for i in range(len(res["months"]))
                         if res["active"][i] and res.get("evaluated",np.ones(len(res["months"]),bool))[i]]
             if candidates:
-                target=st.selectbox("TARGET MONTH",candidates,
+                target=st.selectbox("MÊS-ALVO",candidates,
                        index=candidates.index(risk_target) if risk_target in candidates else 0,
                        format_func=lambda i:label(res["months"][i]),key="exec_target")
             else:
                 target=None
         with c:
-            adjustment=st.slider("LOT ADJUSTMENT (%)",-100,50,0,5,key="exec_adjust",
-                                 help="Hypothetical volume change; does not place or amend production orders.")
+            adjustment=st.slider("AJUSTE DO LOTE (%)",-100,50,0,5,key="exec_adjust",
+                                 help="Mudança hipotética de volume; não cria nem altera ordens de produção.")
         lot=next(x for x in editable if x["index"]==lot_idx)
-        st.caption("Estimated deadline: "+label(lot["deadline"])+
-                   (" · boundary month, exact cut-off unknown" if lot["boundary"] else
-                    " · theoretical open window")+
-                   ". Supplier and planner review required.")
+        st.caption("Mês-limite estimado: "+label(lot["deadline"])+
+                   (" · mês-limite, data exata de corte não informada" if lot["boundary"] else
+                    " · teóricos open window")+
+                   ". É necessária a revisão do fornecedor e do planejador.")
         if target is None:
-            st.warning("No evaluated target month available to compute comparable impact.")
+            st.warning("Nenhum mês-alvo avaliável disponível para comparar impactos.")
         else:
             baseline_plan=np.asarray(res["production"],dtype=float)
             plan=baseline_plan.copy()
@@ -391,28 +391,28 @@ def render_executive_dashboard(
             excess_avoided=base_metrics["expected_excess_units"]-alt_metrics["expected_excess_units"]
             additional_lost=alt_metrics["expected_lost_units"]-base_metrics["expected_lost_units"]
             v=st.columns(5)
-            v[0].metric("Potential excess reduction",_number(excess_avoided)+" un.")
-            v[1].metric("Additional lost sales",_number(additional_lost)+" un.")
-            v[2].metric("Fill rate · scenario",_percent(alt_metrics["fill_rate_pct"]))
-            v[3].metric("Excess risk · target",_percent(alt_metrics["risk_excess_target_pct"]),
+            v[0].metric("Redução potencial de excesso",_number(excess_avoided)+" un.")
+            v[1].metric("Vendas perdidas adicionais",_number(additional_lost)+" un.")
+            v[2].metric("Taxa de atendimento · simulado",_percent(alt_metrics["fill_rate_pct"]))
+            v[3].metric("Risco de excesso · mês-alvo",_percent(alt_metrics["risk_excess_target_pct"]),
                         delta=(f'{alt_metrics["risk_excess_target_pct"]-base_metrics["risk_excess_target_pct"]:+.1f} p.p.'),
                         delta_color="inverse")
-            v[4].metric("Stockout risk · target",_percent(alt_metrics["risk_rupture_target_pct"]),
+            v[4].metric("Risco de ruptura · mês-alvo",_percent(alt_metrics["risk_rupture_target_pct"]),
                         delta=(f'{alt_metrics["risk_rupture_target_pct"]-base_metrics["risk_rupture_target_pct"]:+.1f} p.p.'),
                         delta_color="inverse")
-            status=("Admissible under current assumptions" if admissible else
-                    "Not admissible under current assumptions")
-            st.caption(status+" · Planner review required. "+
-                       "Supplier LT and minimum lots may override theoretical eligibility.")
-            st.markdown("#### Recommended Alternatives · compare trade-offs")
+            status=("Admissível sob as premissas atuais" if admissible else
+                    "Não admissível sob as premissas atuais")
+            st.caption(status+" · Revisão do planejador necessária. "+
+                       "O lead time e os lotes mínimos do fornecedor podem impedir uma alteração teoricamente possível.")
+            st.markdown("#### Alternativas de abastecimento · comparação de impactos")
             options,_=evaluate_lot_options(res,lot_idx,target)
             view=options[["Alternativa","Excesso potencialmente evitado (un.)",
-                          "Vendas perdidas adicionais (un.)","Fill rate simulado (%)",
+                          "Vendas perdidas adicionais (un.)","Taxa de atendimento simulado (%)",
                           "Dentro do critério do TCC",
                           "Não dominada (excesso × perda)"]].copy()
             view["Status"]=np.where(view["Dentro do critério do TCC"],
-                                    "Admissible under current assumptions",
-                                    "Fails simulated criteria")
+                                    "Admissível sob as premissas atuais",
+                                    "Não atende aos critérios simulados")
             view=view.drop(columns=["Dentro do critério do TCC"])
             st.dataframe(view,hide_index=True,use_container_width=True)
             no_lost=options[(options["Dentro do critério do TCC"])&
@@ -420,49 +420,49 @@ def render_executive_dashboard(
                             (options["Excesso potencialmente evitado (un.)"]>1e-6)]
             if not no_lost.empty:
                 best=no_lost.sort_values("Excesso potencialmente evitado (un.)",ascending=False).iloc[0]
-                st.caption("Best trade-off within the *zero additional lost sales* subset: "+
-                           str(best["Alternativa"])+". This is a conditional comparison "+
-                           "of tested options, not a universal or authorized decision.")
+                st.caption("Melhor equilíbrio entre as alternativas *sem vendas perdidas adicionais*: "+
+                           str(best["Alternativa"])+". Esta é uma comparação condicional "+
+                           "das opções testadas, não uma decisão universal nem autorizada.")
             else:
-                st.caption("No tested admissible reduction is free of additional expected lost sales. "
-                           "The planner should compare the full frontier.")
+                st.caption("Nenhuma redução admissível testada elimina totalmente o aumento esperado de vendas perdidas. "
+                           "O planejador deve comparar todas as alternativas.")
             if base_metrics["extrapolated_months"]:
-                st.caption("Excess units use an extrapolated six-month demand tail beyond the recorded horizon ("+
-                           str(base_metrics["extrapolated_months"])+" month(s)). Interpret as approximate.")
-        st.button("Open detailed alternatives and decision frontier",on_click=on_open_simulator)
+                st.caption("Excess unidades use an extrapolated six-month demand tail beyond the recorded horizon ("+
+                           str(base_metrics["extrapolated_months"])+" mês(es)). Interprete como aproximação.")
+        st.button("Abrir alternativas detalhadas e comparação de trade-offs",on_click=on_open_simulator)
     st.divider()
-    st.markdown("### Why Smart Launch?")
-    if mode=="Executive":
-        st.write("Smart Launch adds a traceable decision-support layer between forecasting, "
-                 "inventory exposure, supplier timing and planner-led action. "
-                 "The framework does not execute or approve production changes.")
-    st.markdown("#### Early Warning Performance · historical TCC study")
+    st.markdown("### Por que usar o Smart Launch?")
+    if mode=="Executivo":
+        st.write("O Smart Launch acrescenta uma camada rastreável de apoio à decisão entre a previsão, "
+                 "a exposição de estoque, o prazo do fornecedor e as ações avaliadas pelo planejador. "
+                 "A ferramenta não executa nem aprova alterações na produção.")
+    st.markdown("#### Antecipação dos alertas · resultados históricos do TCC")
     ea,eb,ec=st.columns(3)
-    ea.metric("Smart Launch · alerts before LT","2 / 3")
-    eb.metric("Official benchmark · alerts before LT","0 / 3")
-    ec.metric("Historical alert precision","48%")
-    st.caption("Fixed exploratory/retrospective TCC study results, not recalculated from the uploaded Triângulo. "+
-               "Only three observed excess episodes; no prospective validation or realized savings demonstrated.")
-    if mode!="Executive":
+    ea.metric("Smart Launch · alertas antes do lead time","2 / 3")
+    eb.metric("Plano oficial · alertas antes do lead time","0 / 3")
+    ec.metric("Precisão histórica dos alertas","48%")
+    st.caption("Resultados fixos e retrospectivos do TCC, não recalculados a partir do Triângulo enviado. "+
+               "Apenas três episódios observados de excesso; ainda sem validação prospectiva ou economia real demonstrada.")
+    if mode!="Executivo":
         _decision_trail(summary,res,close,count)
-    if mode=="Analyst":
-        st.markdown("### Evidence Quality & Model Assumptions")
+    if mode=="Analista":
+        st.markdown("### Qualidade das evidências e premissas do modelo")
         x=st.columns(4)
-        x[0].metric("Temporal integrity","Reconstructed")
-        x[1].metric("Development choices","Exploratory")
-        x[2].metric("Observed alert precision · TCC","48%")
-        x[3].metric("Prospective validation","Pending")
-        st.caption("The TCC's P1–P3 development informed MEA-P and the exploratory 20% trigger; "
-                   "the 48% figure is a historical study result, not recalculated from this upload.")
-        with st.expander("MODEL ASSUMPTIONS · validation and limits"):
+        x[0].metric("Integridade temporal","Reconstruída")
+        x[1].metric("Escolhas de desenvolvimento","Exploratórias")
+        x[2].metric("Precisão observada dos alertas · TCC","48%")
+        x[3].metric("Validação prospectiva","Pendente")
+        st.caption("O desenvolvimento dos casos P1–P3 do TCC orientou a MEA-P e o gatilho exploratório de 20%; "
+                   "o valor de 48% pertence ao estudo histórico e não foi recalculado neste envio.")
+        with st.expander("PREMISSAS DO MODELO · validação e limites"):
             st.markdown(
-                "- Historical forecast errors are limited and simulated risk is not calibrated.\n"
-                "- The base assumption is Normal(0, s) unless changed in the analyst workflow.\n"
-                "- Inventory coverage is forward-looking and uses a 180-day operational threshold.\n"
-                "- Supplier dates are approximated at a monthly granularity.\n"
-                "- No prospective evidence of inventory savings or planner execution is claimed.\n"
-                "- MEA-P development outcomes are exploratory, not independent validation.\n"
-                "- Partially external historical comparisons are not fully out-of-sample.\n"
-                "- Decisions remain with the planner."
+                "- Os erros históricos disponíveis são poucos e os riscos simulados não têm calibração comprovada.\n"
+                "- A hipótese básica é Normal(0, s), salvo alteração na análise técnica.\n"
+                "- Inventory coverage is forward-looking and uses a 180 dias · limite operacional.\n"
+                "- Os prazos do fornecedor são aproximados em meses.\n"
+                "- Não há evidência prospectiva de economia de estoque nem de decisões executadas.\n"
+                "- Os resultados da MEA-P no desenvolvimento são exploratórios, não validação independente.\n"
+                "- As comparações históricas parcialmente externas não constituem validação totalmente fora da amostra.\n"
+                "- As decisões continuam sob responsabilidade do planejador."
             )
-    st.button("View model performance, backtesting and evidence",on_click=on_open_analytics)
+    st.button("Ver desempenho dos modelos, validação histórica e evidências",on_click=on_open_analytics)
