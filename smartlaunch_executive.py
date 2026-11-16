@@ -158,13 +158,13 @@ def _coverage_plot(res,count):
 
 def _headline(summary,valid):
     if not valid:
-        return "Simulação indisponível", "Revise os dados disponíveis antes de considerar qualquer ação", "Revisão do planejador necessária"
+        return "Simulação indisponível", "Revise os dados disponíveis antes de considerar qualquer ação.", "Revisão do planejador necessária"
     if summary["alert"]:
         risk=summary["type"].lower()
         first=label(summary["first_month"])
         title="Alto risco de "+("excesso" if risk=="excesso" else "ruptura")+" identificado"
         if summary["first_target_has_changeable_lot"]:
-            return title, ("Risco identificado para "+first+". Existe um lote de produção relevante com uma janela teórica para "
+            return title, ("Risco identificado em "+first+". Existe um lote de produção relevante com uma janela teórica para "
                            "alteração; confirme a data de corte com o fornecedor antes de comparar intervenções."), "Avaliar alternativas de abastecimento"
         if risk=="excesso":
             return title, ("Risco identificado para "+first+". Não há lote relevante alterável "
@@ -324,7 +324,7 @@ def render_executive_dashboard(
                           font=dict(color="#102A43",size=11),
                           legend=dict(orientation="h",y=-.27,x=0,font=dict(size=10)))
         for trace in fig.data:
-            if trace.name=="Previsão em uso":trace.name="Smart Launch · "+model
+            if trace.name=="Previsão operacional":trace.name="Smart Launch · "+model
             if trace.name=="Previsão Oficial":trace.line.color="#71849a"
         st.plotly_chart(fig,use_container_width=True)
     with c2:
