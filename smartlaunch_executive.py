@@ -119,7 +119,7 @@ def _risk_plot(frame):
     chart.add_hline(y=20,line_color="#586c85",line_dash="dash",line_width=1,
                     annotation_text="Alerta >20%",annotation_font_size=10)
     chart.update_layout(
-        template="plotly_white",height=250,barmode="group",hovermode="x unified",
+        template="plotly_white",height=225,barmode="group",hovermode="x unified",
         font=dict(color="#102A43",size=11),margin=dict(l=4,r=4,t=8,b=12),
         paper_bgcolor="#fff",plot_bgcolor="#fff",
         yaxis=dict(range=[0,105],title=None,ticksuffix="%",gridcolor="#eff3f8"),
@@ -147,7 +147,7 @@ def _coverage_plot(res,count):
                     annotation_text=str(LIM)+"-day operational threshold",
                     annotation_position="top left",annotation_font_size=10)
     chart.update_layout(
-        template="plotly_white",height=185,margin=dict(l=5,r=8,t=3,b=13),
+        template="plotly_white",height=158,margin=dict(l=5,r=8,t=3,b=13),
         hovermode="x",showlegend=False,paper_bgcolor="#fff",plot_bgcolor="#fff",
         font=dict(color="#102A43",size=11),
         xaxis=dict(title=None,showgrid=False),
@@ -162,7 +162,7 @@ def _headline(summary,valid):
     if summary["alert"]:
         risk=summary["type"].lower()
         first=label(summary["first_month"])
-        title="High "+risk+" risk detected"
+        title="High "+("excess" if risk=="excesso" else "stockout")+" risk detected"
         if summary["first_target_has_changeable_lot"]:
             return title, ("Risk indicated for "+first+". A relevant production lot has a theoretical "
                            "change window; verify the supplier cut-off before comparing interventions."), "Evaluate supply alternatives"
@@ -199,7 +199,7 @@ def _decision_trail(summary, res, close, count):
              "Compare interventions only when relevant lots remain within a theoretical window."),
             ("05 / TRADE-OFF", "Excess avoided versus lost sales",
              "Evaluate fill rate, shortage risk and inventory under identical demand scenarios."),
-            ("06 / RECOMMENDATION", summary["action"],
+            ("06 / RECOMMENDATION", _headline(summary,True)[2],
              "Planner review required before any operational change."),
         ]
     else:
@@ -242,6 +242,16 @@ def render_executive_dashboard(
     st.markdown('<div class="sl-process"><b>RISK</b> &nbsp;→&nbsp; TIMING &nbsp;→&nbsp; '+
                 'ACTIONABILITY &nbsp;→&nbsp; ALTERNATIVES &nbsp;→&nbsp; TRADE-OFF '+
                 '&nbsp;→&nbsp; <b>RECOMMENDATION</b></div>',unsafe_allow_html=True)
+    if res is not None:
+        supplier_window=("First risk: "+label(summary["first_month"]) if summary.get("alert")
+                         else "No critical alert")
+        supplier_deadline=("Estimated lot deadline: "+label(summary["deadline"])
+                           if summary.get("alert") and summary.get("deadline") is not None
+                           else "No relevant lot deadline")
+        st.markdown('<div class="sl-subline"><span><b>'+html.escape(supplier_window)+
+                    '</b></span><span>'+html.escape(supplier_deadline)+
+                    '</span><span>Supplier lead time: '+str(res["ltm"])+
+                    ' rounded months</span></div>',unsafe_allow_html=True)
     st.markdown('<div class="sl-section">EXECUTIVE KPIs</div>',unsafe_allow_html=True)
     if res is None:
         st.info("Decision Support is incomplete for "+product+": "+errors.get(product,"Insufficient forecast errors")+
@@ -309,7 +319,7 @@ def render_executive_dashboard(
         fig=forecast_figure(
             realized,months,res["center"][:count],official,res["dm"][:,:count],
             close,label,critical_count=min(res["window"],count))
-        fig.update_layout(height=256,margin=dict(l=10,r=8,t=7,b=35),
+        fig.update_layout(height=231,margin=dict(l=10,r=8,t=7,b=35),
                           font=dict(color="#102A43",size=11),
                           legend=dict(orientation="h",y=-.27,x=0,font=dict(size=10)))
         for trace in fig.data:
@@ -384,10 +394,10 @@ def render_executive_dashboard(
             v[1].metric("Additional lost sales",_number(additional_lost)+" un.")
             v[2].metric("Fill rate · scenario",_percent(alt_metrics["fill_rate_pct"]))
             v[3].metric("Excess risk · target",_percent(alt_metrics["risk_excess_target_pct"]),
-                        delta=(_percent(alt_metrics["risk_excess_target_pct"]-base_metrics["risk_excess_target_pct"])+" p.p."),
+                        delta=(f'{alt_metrics["risk_excess_target_pct"]-base_metrics["risk_excess_target_pct"]:+.1f} p.p.'),
                         delta_color="inverse")
             v[4].metric("Stockout risk · target",_percent(alt_metrics["risk_rupture_target_pct"]),
-                        delta=(_percent(alt_metrics["risk_rupture_target_pct"]-base_metrics["risk_rupture_target_pct"])+" p.p."),
+                        delta=(f'{alt_metrics["risk_rupture_target_pct"]-base_metrics["risk_rupture_target_pct"]:+.1f} p.p.'),
                         delta_color="inverse")
             status=("Admissible under current assumptions" if admissible else
                     "Not admissible under current assumptions")
