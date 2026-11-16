@@ -97,13 +97,13 @@ def _future(res, horizon):
 
 
 def _risk_frame(res, count):
-    meses = res["months"][:count]
+    months = res["months"][:count]
     active = np.asarray(res["active"][:count], dtype=bool)
     evaluated = np.asarray(res.get("evaluated", np.ones(len(res["months"]), bool))[:count], dtype=bool)
     ex = np.mean(np.asarray(res["cov"][:, :count]) >= LIM, axis=0)*100
     ru = np.mean(np.asarray(res["lost"][:, :count]) > 0, axis=0)*100
     ex[~evaluated] = np.nan
-    return pd.DataFrame({"Mês":[label(m) for m in meses],
+    return pd.DataFrame({"Mês":[label(m) for m in months],
                          "Período":months, "Excesso":ex, "Ruptura":ru,
                          "Crítica":active, "Avaliável":evaluated})
 
@@ -224,7 +224,7 @@ def render_executive_dashboard(
     product,close,blocks,results,errors,rankings,ready_count,horizon,mode,
     on_open_simulator,on_open_analytics
 ):
-    """Risk → Timing → Actionability → Alternatives → Equilíbrio entre riscos → Recommendation."""
+    """Risco → Momento → Possibilidade de ação → Alternativas → Equilíbrio entre riscos → Recomendação."""
     st.markdown(EXECUTIVE_CSS,unsafe_allow_html=True)
     res=results.get(product)
     summary=card_summary(product,res,close) if res is not None else None
