@@ -414,6 +414,7 @@ def render_executive_dashboard(
                                     "Admissível sob as premissas atuais",
                                     "Não atende aos critérios simulados")
             view=view.drop(columns=["Dentro do critério do TCC"])
+            view=view.rename(columns={"Fill rate simulado (%)":"Taxa de atendimento simulada (%)"})
             st.dataframe(view,hide_index=True,use_container_width=True)
             no_lost=options[(options["Dentro do critério do TCC"])&
                             (options["Vendas perdidas adicionais (un.)"]<=1e-6)&
