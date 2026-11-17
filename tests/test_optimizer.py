@@ -61,6 +61,14 @@ none={**res,"production":np.zeros(6)}
 no=search_supply_combinations(none,close,budget=1000)
 assert no["candidates_checked"]==0 and no["best"] is None
 
+# Espaço de busca contém cortes, aumentos e remanejamentos mistos.
+from smartlaunch_optimizer import _candidate_grid
+mix,space=_candidate_grid([{"index":1},{"index":2}],20,10,1000,42)
+assert space==len(mix)
+assert np.any(mix<0) and np.any(mix>0)
+assert any(a<0 and b>0 for a,b in mix)
+assert any(a==0 and b==0 for a,b in mix)
+
 try:
     search_supply_combinations(res,close,budget=17)
     assert False,"Orçamento inválido deveria falhar"
