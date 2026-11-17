@@ -1,3 +1,20 @@
+# Busca automática de combinações de lotes (Smart Launch — revisão 16/11/2026)
+
+Depois da escolha e confirmação do produto/modelo, a Etapa 6 possui agora **Buscar melhores combinações**. Esta função é pesquisa de cenários condicionada às premissas, não uma decisão ótima certificada nem uma ordem de alteração de produção.
+
+**Variáveis de decisão:** percentuais de corte (0%, 2,5%, 5% ... até o máximo ajustável por lote positivo) combinados entre os meses de produção cujo prazo é teoricamente elegível no fechamento analisado **e** que influenciam a janela crítica de excesso com cobertura avaliável. Não amplia lotes zerados nem move produção para meses novos. Cortes são arredondados em unidades, mantendo o valor original exato para lotes sem corte.
+
+**Critério primário:** minimizar o maior **excedente esperado mensal**, em unidades, entre os meses de cobertura avaliável da janela crítica. Desempates: menor aumento de vendas perdidas e menor corte total de produção. Todas as combinações usam as mesmas 1.000 trajetórias de demanda, com estoque original e editado calculados sob as mesmas premissas.
+
+**Restrições exploratórias:** queda de fill rate no máximo 0,2 p.p. por padrão (configurável), aumento mensal de probabilidade de ruptura no máximo 2,5 p.p. e nenhum novo sinal de ruptura nem de excesso. A triagem usa contas vetorizadas para eficiência; os melhores candidatos são recalculados pelo simulador mensal completo e, nas premissas padrão do TCC, revalidados com o teste de gatilhos/percentis do protocolo.
+
+**Busca e limites:** a grade usa passos de 2,5 pontos percentuais de corte; o usuário define 1.000, 2.500, 5.000 ou 10.000 combinações. Quando todas as combinações cabem no orçamento, a avaliação da grade é exaustiva. Caso contrário, é uma amostra pseudoaleatória reproduzível com cortes individuais e simultâneos incluídos. São reportadas a quantidade de cenários comparados, o espaço teórico da grade, o número de lotes elegíveis e as melhores alternativas verificadas. Não afirmar 'ótimo global'. Em caso de nenhum corte que passe pelos limites, o painel informa que não houve alternativa admissível identificada.
+
+**Uso:** clicar em Buscar melhores combinações; comparar a shortlist; selecionar cenário; clicar Aplicar cenário selecionado aos lotes; conferir os impactos no mesmo simulador manual e validar lead time real, pedidos confirmados, lotes mínimos, contratos, capacidade e restrições comerciais. O botão aplica apenas no estado local da simulação, não em ERP ou no Triângulo original. A tabela de ranking pode ser exportada como CSV.
+
+**Arquivos:** smartlaunch_optimizer.py, smartlaunch_ui.py, tests/test_optimizer.py, tests/test_ui.py e .github/workflows/validate.yml.
+
+---
 # Simulador mensal integrado ao site — novembro de 2026
 
 A planilha SmartLaunch_simulador_jun-26_corrigido.xlsx serviu como referência funcional, **não como fonte de dados carregada para o site**. O site processa o Triângulo enviado e o modelo operacional escolhido, reutilizando o cálculo de demanda e estoque do Python.
