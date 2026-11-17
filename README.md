@@ -1,3 +1,14 @@
+# Simulador mensal integrado ao site — novembro de 2026
+
+A planilha SmartLaunch_simulador_jun-26_corrigido.xlsx serviu como referência funcional, **não como fonte de dados carregada para o site**. O site processa o Triângulo enviado e o modelo operacional escolhido, reutilizando o cálculo de demanda e estoque do Python.
+
+Na Etapa 6 o usuário agora pode visualizar o plano original, editar vários lotes elegíveis em uma tabela, ajustar premissas de sensibilidade (180 dias de cobertura e multiplicador 1,0 por padrão) e ver uma comparação dinâmica entre os planos original e simulado. A comparação usa exatamente as mesmas trajetórias e apresenta estoque, excesso esperado, chance de excesso, ruptura e fill rate. É possível exportar os resultados em CSV.
+
+O recurso foi implementado em smartlaunch_impact.py (função simulate_monthly_scenario) e smartlaunch_ui.py. As edições não modificam dados da empresa, ordens ou arquivos; são contrafactuais. O mês-limite de fornecedor é apenas estimado, e não há garantia de cancelamento de lote. Probabilidade de excesso no último mês segue não avaliável mesmo quando estimativas de unidades são extrapoladas.
+
+Se a simulação for indisponível por falta de erros históricos, o painel explica a ausência em vez de apresentar risco zero. Não são calculadas economias financeiras reais.
+
+---
 # Interface Smart Launch — seleção guiada e identidade visual — 16/11/2026
 
 **Experiência principal (uma página, sem abas):**
