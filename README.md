@@ -1,3 +1,17 @@
+# Atualização do site conforme site_ajustes_tcc_v2.zip — 17/11/2026
+
+Integração sobre o **site completo existente**, não substituição por ZIP incompleto. O motor de previsão, a busca de combinações e as análises de impacto existentes foram preservados.
+
+- **Etapa 5:** nova faixa com semáforo **de excesso** por produto; vermelho exige revisão imediata, amarelo sinaliza prazo de decisão, verde recomenda acompanhamento; a ausência de dados aparece como *sem simulação*, nunca como risco zero.
+- **Detalhamento:** botão “Abrir semáforo e simulador do alerta” permite visualizar a justificativa da cor, os lotes com prazo teórico ainda futuro e os limites exploratórios individuais calculados pelo motor original.
+- **Comparar ações:** plano original, maior corte em um lote, cortes simultâneos ou percentuais personalizados, usando as mesmas trajetórias de demanda; painéis com excesso no pior mês, quantidade retirada, vendas perdidas e fill rate.
+- **Foco acadêmico:** excesso de estoque é o objetivo principal. Ruptura é **apenas restrição**, e cortes que ultrapassem os limites exploratórios precisam de revisão humana.
+- **Governança:** não altera pedidos nem ERP; os resultados são contrafactuais sob hipóteses de simulação, não economias comprovadas. Lead time mensal não substitui contrato, cutoff diário ou lote mínimo.
+- **Validação:** `tests/test_semaforo.py` e suite existente. O teste com dados reais ainda depende de Triângulo autorizado fora do repositório. O teste da aplicação no navegador não está automatizado aqui.
+- **Reversão:** o estado anterior de `main` foi preservado na branch `backup/pre-semaforo-zip-2026-11-17`.
+
+---
+
 # Busca automática de combinações de lotes (Smart Launch — revisão 16/11/2026)
 
 Depois da escolha e confirmação do produto/modelo, a Etapa 6 possui agora **Buscar melhores combinações**. Esta função é pesquisa de cenários condicionada às premissas, não uma decisão ótima certificada nem uma ordem de alteração de produção.
