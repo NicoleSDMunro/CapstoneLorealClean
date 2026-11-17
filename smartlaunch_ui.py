@@ -26,6 +26,7 @@ from smartlaunch_impact import (editable_lots, outcome_metrics, evaluate_lot_opt
                                 historical_mape_vs_official, tcc_lot_limits, tcc_check,
                                 simulate_monthly_scenario)
 from smartlaunch_optimizer import search_supply_combinations
+import smartlaunch_semaforo_ui as SEM
 from smartlaunch_validation import (
     reconstruct_history, first_alerts, latest_verifiable_close,
     available_origin_reviews, EVENT_YES, EVENT_NO,
@@ -108,6 +109,7 @@ div[data-testid="stAlert"]{border-radius:10px!important;}
 # Apenas uma página. Aprofundamentos são seções sob demanda, não abas laterais.
 DETAIL_PAGES = [
     "Nenhuma análise aberta",
+    "Semáforo e simulador do gatilho",
     "Impacto operacional",
     "Riscos de estoque",
     "Previsão e modelos",
@@ -747,6 +749,7 @@ else:
 # 05 — O problema central do TCC: excesso e oportunidade de intervenção.
 journey_head("05", "Risco de excesso e prazo para agir",
              "Localizar o mês crítico, avaliar os alertas e verificar o lead time dos lotes.")
+SEM.faixa_produtos(results,close)
 if result is None:
     st.info("Riscos probabilísticos indisponíveis para "+chosen+". Nenhum alerta foi inventado.")
 else:
@@ -759,6 +762,10 @@ else:
         st.markdown("**Chance de vendas perdidas**")
         st.plotly_chart(risk_plot(result,rows_journey,"Ruptura (%)","#bd8d2d"),
                         use_container_width=True,key="journey_risk_rupture")
+    SEM.semaforo_resumo(result,close,chosen)
+    st.button("Abrir semáforo e simulador do alerta · o que posso fazer?",
+              key="open_semaforo_page", on_click=navigate,
+              args=("Semáforo e simulador do gatilho",chosen))
     st.dataframe(rows_journey[["Mês","Excesso (%)","Ruptura (%)",
                                 "Janela crítica","Alerta excesso","Alerta ruptura"]].head(visible_months),
                  hide_index=True,use_container_width=True,key="journey_risk_table")
@@ -1245,6 +1252,13 @@ elif page == "Riscos de estoque":
         st.plotly_chart(line,use_container_width=True)
     else:
         st.info("Ainda não há fechamentos históricos suficientes com simulação válida para mostrar a evolução deste mês-alvo.")
+
+elif page == "Semáforo e simulador do gatilho":
+    if results.get(chosen) is None:
+        st.warning("Para simular alterações é necessário histórico de erros suficiente para " + chosen + ". " +
+                   errors.get(chosen, "Simulação indisponível."))
+    else:
+        SEM.pagina(results[chosen],close,chosen)
 
 elif page == "Simulador de decisões":
     st.subheader("Simular uma intervenção específica")
