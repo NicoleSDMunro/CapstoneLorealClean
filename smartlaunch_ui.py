@@ -25,6 +25,7 @@ from smartlaunch_supply import future_lots, supply_diagnosis
 from smartlaunch_impact import (editable_lots, outcome_metrics, evaluate_lot_options,
                                 historical_mape_vs_official, tcc_lot_limits, tcc_check,
                                 simulate_monthly_scenario)
+from smartlaunch_optimizer import search_supply_combinations
 from smartlaunch_validation import (
     reconstruct_history, first_alerts, latest_verifiable_close,
     available_origin_reviews, EVENT_YES, EVENT_NO,
@@ -791,13 +792,128 @@ else:
                  use_container_width=True,key="monthly_original_plan")
     st.caption("Fonte: revisão do Triângulo. O simulador não altera o arquivo nem executa pedidos.")
     lots=editable_lots(result,close)
-    st.markdown("#### 2. Edite a produção dos lotes disponíveis")
+    # A pesquisa automática usa as mesmas premissas do simulador manual.
+    with st.expander("Premissas da simulação e da busca automática",expanded=False):
+        x,y=st.columns(2)
+        with x:
+            cover_days=st.number_input("Cobertura para excesso (dias)",
+                   min_value=30,max_value=360,value=int(LIM),step=30,key="monthly_coverage")
+        with y:
+            uncertainty=st.slider("Multiplicador de incerteza",0.5,2.0,1.0,0.25,
+                                  key="monthly_uncertainty")
+        st.caption("Padrão metodológico: 180 dias e multiplicador 1,0. "
+                   "Essas premissas afetam igualmente o plano atual e o alternativo "
+                   "nesta etapa, sem modificar as etapas 3 a 5.")
+
+    editor_scope=(st.session_state.get("data_digest","")[:12],str(review),chosen,choice_model)
+    editor_key=("monthly_editor_"+"_".join(str(x).replace("/","-") for x in editor_scope)
+                +"_v"+str(st.session_state.get("monthly_editor_version",0)))
+
+    st.markdown("#### 2. Buscar automaticamente combinações de cortes")
+    st.caption("O Smart Launch testa milhares de combinações de lotes ainda negociáveis "
+               "em tese, com cortes em passos de 2,5%. "
+               "Ordena pelo menor maior excedente esperado, rejeita novos sinais "
+               "de ruptura e protege o fill rate. Não altera pedidos reais.")
+    opt_left,opt_middle,opt_right=st.columns([1.1,1,1.1])
+    with opt_left:
+        opt_budget=st.selectbox("Combinações a testar",
+            [1000,2500,5000,10000],index=2,key="optimizer_budget")
+    with opt_middle:
+        opt_maxcut=st.slider("Corte máximo por lote (%)",
+            min_value=10.0,max_value=75.0,value=50.0,step=2.5,key="optimizer_cut")
+    with opt_right:
+        opt_fill=st.slider("Queda máxima do fill rate (p.p.)",
+            min_value=0.0,max_value=1.0,value=0.2,step=0.1,key="optimizer_fill")
+    st.caption("Proteção adicional do TCC: sem novo sinal de ruptura e "
+               "aumento mensal de ruptura de no máximo 2,5 p.p. "
+               "A busca verifica apenas lotes que podem afetar os meses avaliáveis "
+               "da janela crítica; os demais permanecem no plano original.")
+    optimization_scope=(editor_scope,int(cover_days),float(uncertainty),
+                        int(opt_budget),float(opt_maxcut),float(opt_fill))
+    if st.button("Buscar melhores combinações",type="primary",
+                 key="optimizer_search",use_container_width=True):
+        with st.spinner("Avaliando cortes de produção e riscos de ruptura..."):
+            try:
+                result_search=search_supply_combinations(
+                    result,close,budget=opt_budget,max_cut_pct=opt_maxcut,
+                    coverage_days=cover_days,uncertainty_multiplier=uncertainty,
+                    fill_drop_limit_pp=opt_fill,rupture_rise_limit_pp=2.5)
+            except (ValueError,TypeError) as exc:
+                st.session_state.pop("optimizer_run",None)
+                st.error("A busca não pôde ser executada: "+str(exc))
+            else:
+                st.session_state["optimizer_run"]={
+                    "scope":optimization_scope,"result":result_search}
+    saved_search=st.session_state.get("optimizer_run")
+    if saved_search is not None and saved_search["scope"]==optimization_scope:
+        search=saved_search["result"]
+        if search["candidates_checked"]:
+            st.caption(
+                f'{search["candidates_checked"]:,}'.replace(",",".")+
+                " combinações efetivamente comparadas · "+
+                f'{search["grid_size"]:,}'.replace(",",".")+
+                " possibilidades na grade · "+
+                str(len(search["eligible_lots"]))+
+                " lotes elegíveis. "
+                "Quando a grade excede o orçamento, a busca é uma amostra "
+                "reproduzível e não garante ótimo global.")
+            st.metric("Cenários com redução admissível na triagem",
+                      str(search["n_admissible_screened"]))
+        if search["best"] is None:
+            st.info(search["reason"])
+        else:
+            best=search["best"]
+            st.markdown("**Melhor compromisso encontrado sob as premissas atuais**")
+            p1,p2,p3=st.columns(3)
+            p1.metric("Excedente esperado evitado no pior mês",
+                      fmt(best["Excedente evitado no pior mês (un.)"])+" un.")
+            p2.metric("Vendas perdidas adicionais",
+                      fmt(best["Vendas perdidas adicionais (un.)"])+" un.")
+            p3.metric("Fill rate",f'{best["Fill rate (%)"]:.2f}%')
+            st.caption("Mês do maior excedente no cenário: "+
+                       best["Mês de maior excedente"]+
+                       ". O cenário não é uma ordem de produção nem substitui "
+                       "a revisão de lead time, contratos ou capacidade.")
+            display_cols=["Cenário","Cortes de produção","Lotes alterados",
+                "Excedente evitado no pior mês (un.)",
+                "Vendas perdidas adicionais (un.)","Fill rate (%)",
+                "Maior aumento ruptura (p.p.)","Mês de maior excedente"]
+            st.dataframe(search["shortlist"][display_cols],
+                         hide_index=True,use_container_width=True,
+                         key="optimizer_top_combinations")
+            chosen_opt=st.selectbox("Cenário que deseja aplicar ao simulador manual",
+                search["shortlist"]["Cenário"].tolist(),
+                format_func=lambda ident: ident+" · "+
+                    search["shortlist"].set_index("Cenário").loc[ident,"Cortes de produção"],
+                key="optimizer_picked")
+            if st.button("Aplicar cenário selecionado aos lotes",
+                         key="optimizer_apply"):
+                st.session_state["optimizer_applied"]={
+                    "scope":editor_scope,
+                    "plan":search["plans"][chosen_opt].tolist(),
+                }
+                st.session_state["monthly_editor_version"]=(
+                    st.session_state.get("monthly_editor_version",0)+1)
+                st.rerun()
+            st.download_button("Exportar ranking de cenários (.csv)",
+                search["shortlist"].to_csv(index=False).encode("utf-8-sig"),
+                file_name="smartlaunch_cenarios_"+chosen+".csv",
+                mime="text/csv",key="optimizer_export")
+        st.caption("Validação: candidatos selecionados são recalculados "
+                   "com as trajetórias completas de demanda, incluindo risco "
+                   "de ruptura; as verificações do TCC são aplicadas "
+                   "nas premissas originais de 180 dias e multiplicador 1,0.")
+    elif saved_search is not None:
+        st.info("As premissas da busca mudaram. Execute novamente para comparar "
+                "cenários com os novos parâmetros.")
+
+    st.markdown("#### 3. Confira ou edite os lotes de produção")
     st.caption("Ajustes negativos reduzem produção; positivos aumentam. "
                "É possível editar mais de um mês ao mesmo tempo.")
-    editor_scope=(st.session_state.get("data_digest","")[:12],str(review),chosen,choice_model)
-    editor_key="monthly_editor_"+"_".join(str(x).replace("/","-") for x in editor_scope)
     if st.button("Restaurar lotes do plano atual",key="monthly_reset"):
-        st.session_state.pop(editor_key,None)
+        st.session_state.pop("optimizer_applied",None)
+        st.session_state["monthly_editor_version"]=(
+            st.session_state.get("monthly_editor_version",0)+1)
         st.rerun()
     candidate=np.asarray(result["production"],dtype=float).copy()
     if lots:
@@ -809,7 +925,12 @@ else:
             "Mês":label(lot["month"]),
             "Lote atual (un.)":float(lot["units"]),
             "Prazo teórico":label(lot["deadline"]),
-            "Alteração (un.)":0.0,
+            "Alteração (un.)":(
+                float(st.session_state["optimizer_applied"]["plan"][int(lot["index"])])
+                -float(result["production"][int(lot["index"])])
+                if st.session_state.get("optimizer_applied",{}).get("scope")==editor_scope
+                else 0.0
+            ),
         } for lot in lots])
         edited=st.data_editor(grid,hide_index=True,num_rows="fixed",key=editor_key,
             use_container_width=True,
@@ -836,17 +957,6 @@ else:
         st.info("Não há lotes positivos ainda alteráveis pelo lead time teórico. "
                 "O cenário permanece igual ao original; considere ações comerciais.")
 
-    with st.expander("Premissas de sensibilidade · mesmas regras para ambos os planos"):
-        x,y=st.columns(2)
-        with x:
-            cover_days=st.number_input("Cobertura para excesso (dias)",
-                   min_value=30,max_value=360,value=int(LIM),step=30,key="monthly_coverage")
-        with y:
-            uncertainty=st.slider("Multiplicador de incerteza",0.5,2.0,1.0,0.25,
-                                  key="monthly_uncertainty")
-        st.caption("Padrão do TCC: 180 dias e multiplicador 1,0. Alterações aqui afetam "
-                   "somente este simulador, não as etapas 3 a 5.")
-
     analysis=simulate_monthly_scenario(result,candidate,
                    coverage_days=cover_days,uncertainty_multiplier=uncertainty)
     orig=analysis["original"]
@@ -855,7 +965,7 @@ else:
     monthly=analysis["monthly"].copy()
     monthly["Mês"]=[label(m) for m in result["months"]]
 
-    st.markdown("#### 3. Impactos do cenário")
+    st.markdown("#### 4. Impactos do cenário")
     c1,c2,c3,c4=st.columns(4)
     c1.metric("Excedente no pior mês",fmt(alt["Excedente no pior mês (un.)"])+" un.",
               delta=fmt(diff["Excedente no pior mês (un.)"])+" un.",delta_color="inverse")
@@ -870,7 +980,7 @@ else:
     st.dataframe(compare,hide_index=True,use_container_width=True,
                  key="monthly_kpi_comparison")
 
-    st.markdown("#### 4. Excesso e estoque por mês")
+    st.markdown("#### 5. Excesso e estoque por mês")
     ex_fig=go.Figure()
     ex_fig.add_trace(go.Bar(x=monthly["Mês"],y=monthly["Excesso atual (%)"],
                             name="Atual",marker_color="#B2C1CC"))
@@ -906,7 +1016,7 @@ else:
         st.caption("Excesso do último mês não avaliável: faltam meses futuros observados. "
                    "Excedente em unidades nesse mês depende da extrapolação do consumo.")
 
-    st.markdown("#### 5. Orientação para o planejador")
+    st.markdown("#### 6. Orientação para o planejador")
     if not analysis["changed_lots"]:
         st.info("Plano inalterado: faça um ajuste para comparar alternativas.")
     elif analysis["new_rupture_signal"] or analysis["max_rupture_rise_pp"]>2.5:
