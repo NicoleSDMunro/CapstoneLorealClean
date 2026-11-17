@@ -330,3 +330,64 @@ def checar_censura(blocks, sheets, close, known_fn):
             "Nenhum estoque final zerado após início das vendas nos registros disponíveis. "
             "Isso não descarta falta de produto dentro do mês."
         )
+
+
+def linha_do_tempo_ui(produto, close, blocks, base, model=None):
+    st.markdown("#### 5. Linha do tempo dos alertas de excesso")
+    st.caption(
+        "Fechamentos históricos por mês-alvo; cada cor é reconstruída, e não um aviso "
+        "enviado na época. ★ marca cobertura reestimada como excessiva com vendas posteriores "
+        "disponíveis, que podem envolver extrapolação da última demanda conhecida."
+    )
+    with st.spinner("Reconstruindo fechamentos anteriores..."):
+        historico, sem = linha_do_tempo(produto, close, blocks, base, model=model)
+    if historico.empty:
+        st.info("Não existem fechamentos suficientes para um histórico probabilístico confiável.")
+    else:
+        visao = st.radio("Visualizar", ["Excesso", "Ruptura (restrição)"], horizontal=True,
+                         key=f"timeline_view_{produto}_{_lab(close)}")
+        tipo = "excesso" if visao == "Excesso" else "ruptura"
+        fechs = sorted(historico["fechamento"].unique())
+        meses = sorted(historico["mes"].unique())
+        ix = {m:i for i,m in enumerate(fechs)}
+        jx = {m:i for i,m in enumerate(meses)}
+        z = np.full((len(fechs), len(meses)), np.nan)
+        textos = [["" for _ in meses] for _ in fechs]
+        for lin in historico.itertuples():
+            i = ix[lin.fechamento]
+            j = jx[lin.mes]
+            cor = getattr(lin, "cor_"+tipo)
+            chance = getattr(lin, "chance_"+tipo)
+            z[i,j] = CODIGO[cor]
+            if np.isfinite(chance):
+                textos[i][j] = f"{chance:.0%}" + (
+                    " ★" if tipo == "excesso" and lin.excesso_real is True else ""
+                )
+        escala = [
+            [0, "#FFFFFF"], [.1999, "#FFFFFF"],
+            [.2, "#E4E8ED"], [.3999, "#E4E8ED"],
+            [.4, "#A8D9BA"], [.5999, "#A8D9BA"],
+            [.6, "#F5D58E"], [.7999, "#F5D58E"],
+            [.8, "#E6A7A0"], [1, "#E6A7A0"],
+        ]
+        graf = go.Figure(go.Heatmap(
+            z=z, x=[_lab(m) for m in meses], y=[_lab(f) for f in fechs],
+            zmin=-.5, zmax=4.5, colorscale=escala,
+            text=textos, texttemplate="%{text}", showscale=False,
+            xgap=3, ygap=3,
+            hovertemplate="Fechamento %{y} · mês-alvo %{x}<br>%{text}<extra></extra>"
+        ))
+        graf.update_layout(
+            template="plotly_white", height=max(270,100+44*len(fechs)),
+            margin=dict(l=8,r=8,t=12,b=20), yaxis=dict(autorange="reversed"),
+            xaxis_title="Mês-alvo", yaxis_title="Fechamento"
+        )
+        st.plotly_chart(graf, use_container_width=True,
+                        key=f"timeline_graph_{produto}_{_lab(close)}_{tipo}")
+        st.caption("Vermelho = agir já; amarelo = agir até prazo; verde = acompanhar; "
+                   "cinza = sem sinal; branco = fora da janela ou sem avaliação.")
+    if sem:
+        st.caption(
+            "Fechamentos sem simulação: " + ", ".join(_lab(m) for m,_ in sem) +
+            ". Sem histórico de erros não significa risco zero."
+        )
