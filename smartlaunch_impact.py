@@ -241,3 +241,128 @@ def historical_mape_vs_official(detail, model):
         "mape_oficial":mean_official,"pares":len(pairs),
         "delta_pp":mean_official-mean_model,
     }
+
+
+def simulate_monthly_scenario(res, alternative_plan, *, coverage_days=180,
+                              uncertainty_multiplier=1.0):
+    """Compara produção original vs. edição de vários lotes, na mesma sacola.
+
+    O simulador mensal é inspirado no Excel SmartLaunch_simulador_jun-26.
+    Nenhuma previsão/modelo é recalculado aqui: o motor da análise confirmada
+    fornece as 1.000 trajetórias. Premissas editáveis aplicam-se simetricamente
+    aos dois planos. Não altera res em memória nem executa pedidos reais.
+    """
+    original=np.asarray(res["production"],dtype=float)
+    candidate=np.asarray(alternative_plan,dtype=float)
+    central=np.asarray(res["center"],dtype=float)
+    simulated=np.asarray(res["dm"],dtype=float)
+    if original.shape!=candidate.shape or candidate.ndim!=1:
+        raise ValueError("Lotes editados e plano original devem ter os mesmos meses.")
+    if not np.isfinite(candidate).all() or np.any(candidate < 0):
+        raise ValueError("A produção simulada deve ser finita e não negativa.")
+    if not 30 <= float(coverage_days) <= 360:
+        raise ValueError("A cobertura de sensibilidade deve ficar entre 30 e 360 dias.")
+    if not 0.5 <= float(uncertainty_multiplier) <= 2.0:
+        raise ValueError("O multiplicador de incerteza deve ficar entre 0,5 e 2,0.")
+    if simulated.ndim!=2 or simulated.shape[1]!=len(original):
+        raise ValueError("Trajetórias inválidas: demanda e produção sem horizonte comum.")
+
+    # Multiplicador 1,0 mantém exatamente as trajetórias do motor do TCC.
+    # Outros valores são sensibilidade em torno da previsão central.
+    if abs(float(uncertainty_multiplier)-1.0) < 1e-12:
+        demand=simulated
+    else:
+        demand=np.maximum(0,central[None,:]+float(uncertainty_multiplier)*
+                          (simulated-central[None,:]))
+    stock0,lost0,cov0=balance(res["e0"],original,demand)
+    stock1,lost1,cov1=balance(res["e0"],candidate,demand)
+
+    months=res["months"]
+    H=len(months)
+    active=np.asarray(res["active"],dtype=bool)
+    evaluated=np.asarray(res.get("evaluated",
+                       np.array([j<H-1 for j in range(H)])),dtype=bool)
+    eligible=active & evaluated
+    if not active.any():
+        raise ValueError("Sem meses na janela crítica para comparar.")
+    n=len(demand)
+    full=int(float(coverage_days)//30)
+    fraction=(float(coverage_days)/30)-full
+    excess0=np.empty_like(stock0)
+    excess1=np.empty_like(stock1)
+    for j in range(H):
+        # Consumo dos próximos dias de cobertura; repete o último mês
+        # simulado na cauda, como hipótese explícita do XLSX e do método.
+        required=np.zeros(n)
+        for delta in range(1,full+1):
+            required+=demand[:,min(j+delta,H-1)]
+        if fraction>1e-10:
+            required+=fraction*demand[:,min(j+full+1,H-1)]
+        excess0[:,j]=np.maximum(0,stock0[:,j]-required)
+        excess1[:,j]=np.maximum(0,stock1[:,j]-required)
+
+    ex0=np.where(evaluated,(cov0>=coverage_days).mean(axis=0)*100,np.nan)
+    ex1=np.where(evaluated,(cov1>=coverage_days).mean(axis=0)*100,np.nan)
+    ru0=(lost0>0).mean(axis=0)*100
+    ru1=(lost1>0).mean(axis=0)*100
+    monthly=[]
+    for j,month in enumerate(months):
+        v0=cov0[:,j]
+        v1=cov1[:,j]
+        v0=v0[np.isfinite(v0)]
+        v1=v1[np.isfinite(v1)]
+        monthly.append({
+            "Mês":str(month),
+            "Produção original (un.)":float(original[j]),
+            "Produção simulada (un.)":float(candidate[j]),
+            "Variação do lote (un.)":float(candidate[j]-original[j]),
+            "Demanda média (un.)":float(demand[:,j].mean()),
+            "Estoque P50 atual (un.)":float(np.median(stock0[:,j])),
+            "Estoque P50 simulado (un.)":float(np.median(stock1[:,j])),
+            "Excedente atual (un.)":float(excess0[:,j].mean()),
+            "Excedente simulado (un.)":float(excess1[:,j].mean()),
+            "Excesso atual (%)":float(ex0[j]) if np.isfinite(ex0[j]) else np.nan,
+            "Excesso simulado (%)":float(ex1[j]) if np.isfinite(ex1[j]) else np.nan,
+            "Ruptura atual (%)":float(ru0[j]),
+            "Ruptura simulada (%)":float(ru1[j]),
+            "Cobertura atual P50 (dias)":float(np.median(v0)) if len(v0) and evaluated[j] else np.nan,
+            "Cobertura simulada P50 (dias)":float(np.median(v1)) if len(v1) and evaluated[j] else np.nan,
+            "Janela crítica":bool(active[j]),
+            "Cobertura avaliável":bool(evaluated[j]),
+        })
+    def aggregate(stock,lost,excess,ex_prob,ru_prob):
+        demand_total=float(demand[:,active].sum())
+        lost_total=float(lost[:,active].sum())
+        fill=(100*(1-lost_total/demand_total)) if demand_total>0 else 100.0
+        peak_ex=float(np.max(excess[:,eligible].mean(axis=0))) if eligible.any() else np.nan
+        maxrisk=float(np.nanmax(ex_prob[eligible])) if eligible.any() else np.nan
+        maxrup=float(np.max(ru_prob[active]))
+        return {
+            "Excedente no pior mês (un.)":peak_ex,
+            "Vendas perdidas na janela (un.)":float(lost[:,active].sum(axis=1).mean()),
+            "Vendas atendidas na janela (un.)":float(demand[:,active].sum(axis=1).mean()
+                                                   -lost[:,active].sum(axis=1).mean()),
+            "Fill rate (%)":max(0.,min(100.,fill)),
+            "Maior chance de excesso (%)":maxrisk,
+            "Maior chance de ruptura (%)":maxrup,
+        }
+    before=aggregate(stock0,lost0,excess0,ex0,ru0)
+    after=aggregate(stock1,lost1,excess1,ex1,ru1)
+    rupture_rise=float(np.max(ru1[active]-ru0[active]))
+    new_rupture=bool(np.any((ru1[active]>2.5)&(ru0[active]<=2.5)))
+    new_excess=bool(eligible.any() and np.any((ex1[eligible]>2.5)&(ex0[eligible]<=2.5)))
+    return {
+        "monthly":pd.DataFrame(monthly),"original":before,"simulated":after,
+        "demand":demand,"same_demands":True,
+        "changed_lots":int(np.count_nonzero(np.abs(candidate-original)>1e-7)),
+        "new_rupture_signal":new_rupture,
+        "new_excess_signal":new_excess,
+        "max_rupture_rise_pp":rupture_rise,
+        "evaluated_months":int(eligible.sum()),
+        "extrapolates_future_consumption":True,
+        "coverage_days":float(coverage_days),
+        "uncertainty_multiplier":float(uncertainty_multiplier),
+        "delta":{
+            key:after[key]-before[key] for key in before
+        },
+    }
