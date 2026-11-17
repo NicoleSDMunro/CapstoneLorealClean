@@ -2,12 +2,14 @@
 import html
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from smartlaunch_semaforo import (
     CORES, LEGENDA, _lab, cor_do_produto, lotes_alteraveis,
-    semaforo, semaforo_cenario,
+    semaforo, semaforo_cenario, vies_persistente,
 )
+from smartlaunch_linha_tempo import linha_do_tempo, CODIGO
 from smartlaunch_impact import simulate_monthly_scenario, tcc_lot_limits
 
 
@@ -38,6 +40,9 @@ def cartao(linha, titulo=None, compacto=False):
             f'{html.escape(linha["acao"])}</div>'
             f'<div style="color:#526477;font-size:.9rem;margin-top:4px"><b>Motivo:</b> '
             f'{html.escape(linha["porque"])}</div>'
+            f'<div style="color:#33414f;margin-top:7px;font-size:.88rem">'
+            f'<b>Quem conduz:</b> {html.escape(linha.get("decisor","—"))} · '
+            f'<b>Até quando:</b> {html.escape(linha.get("ate","—"))}</div>'
         )
     st.markdown(texto + "</div>", unsafe_allow_html=True)
 
@@ -54,7 +59,8 @@ def legenda():
             "Chance de excesso em cobertura ≥180 dias, nos meses avaliáveis da janela crítica. "
             "Aviso >2,5%; alerta >20% (limiares exploratórios do TCC). "
             "O prazo é mês do lote menos lead time, em meses, e depende de confirmação "
-            "dos contratos e da data de corte do fornecedor. Nenhuma cor aprova um corte."
+            "dos contratos e da data de corte do fornecedor. Nenhuma cor aprova um corte. "
+            "Papéis de Supply, Demanda e Comercial são sugestões, a validar com a L’Oréal."
         )
 
 
@@ -72,11 +78,13 @@ def semaforo_resumo(res, close, produto):
     if secundario["cor"] != "cinza":
         with st.expander("Restrição complementar: risco de ruptura"):
             cartao(secundario, "Risco de ruptura")
+    with st.expander("Diagnóstico complementar: viés da previsão", expanded=False):
+        cartao_vies(res)
     legenda()
     return linhas
 
 
-def pagina(res, close, produto):
+def pagina(res, close, produto, blocks=None, base=None):
     st.subheader("Recebi um alerta de excesso. O que posso fazer?")
     st.caption(
         f"Produto {produto} · fechamento {_lab(close)} · lead time {int(res['ltm'])} meses · "
@@ -97,6 +105,8 @@ def pagina(res, close, produto):
             "Não é possível simular cortes de fornecedor neste fechamento. "
             "Avaliar estoque já existente e alternativas comerciais com a L’Oréal."
         )
+        if blocks is not None and base is not None:
+            linha_do_tempo_ui(produto, close, blocks, base, model=res.get("model"))
         return
     linhas = []
     for l in lotes:
@@ -244,6 +254,8 @@ def pagina(res, close, produto):
         "Resultado contrafactual com as mesmas 1.000 trajetórias, não economia realizada. "
         "Alterações não são aplicadas ao Triângulo nem a pedidos no ERP."
     )
+    if blocks is not None and base is not None:
+        linha_do_tempo_ui(produto, close, blocks, base, model=res.get("model"))
 
 
 def faixa_produtos(results, close):
