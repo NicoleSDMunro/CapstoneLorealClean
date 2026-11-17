@@ -23,7 +23,7 @@ def selection(label):
 assert has_stage("Dados e diagnóstico")
 assert has_stage("Avaliação e seleção dos modelos")
 assert not has_stage("Previsão mensal de demanda"),"Previsão antes do botão de confirmação"
-assert not has_stage("Alternativas e decisão do planejador")
+assert not has_stage("Simulador mensal · plano atual × simulado")
 for label in ("FECHAMENTO · REVISÃO DO PLANO","HORIZONTE DOS GRÁFICOS",
               "ESCOLHER PRODUTO","ESCOLHER MODELO"):
     selection(label)
@@ -40,8 +40,9 @@ assert at.session_state["operational_P3"]=="Naive"
 assert any(x["Produto"]=="P3" and x["Aprovado"]=="Naive"
            for x in at.session_state["approvals"])
 assert has_stage("Previsão mensal de demanda")
+assert any("Plano de produção original" in str(m.value) for m in at.markdown)
 for stage in ("Incerteza e evolução do estoque","Risco de excesso e prazo para agir",
-              "Alternativas e decisão do planejador"):
+              "Simulador mensal · plano atual × simulado"):
     assert has_stage(stage),stage
 
 # A troca de modelo invalida a análise até nova confirmação.
