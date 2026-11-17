@@ -16,10 +16,13 @@ from smartlaunch_impact import (
 )
 
 
-def _candidate_grid(lots, max_pct, budget, seed):
-    """Retorna a matriz de percentuais de corte, incluindo baseline e âncoras."""
+def _candidate_grid(lots, max_pct, max_increase_pct, budget, seed):
+    """Percentuais positivos = cortes; negativos = aumentos de produção."""
     step = 2.5
-    levels = np.round(np.arange(0, max_pct + 0.001, step), 2)
+    cut_levels = np.arange(0, max_pct + 0.001, step)
+    increase_levels = np.arange(-max_increase_pct, -0.001, 5.0)
+    levels = np.round(np.concatenate((increase_levels, cut_levels)), 2)
+    zero_index = int(np.flatnonzero(levels == 0)[0])
     dimension = len(lots)
     space_size = len(levels) ** dimension
     if space_size <= budget:
@@ -36,35 +39,50 @@ def _candidate_grid(lots, max_pct, budget, seed):
                 seen.add(key)
                 selections.append(key)
 
-        add([0] * dimension)
+        add([zero_index] * dimension)
         for j in range(dimension):
-            for i in range(1, len(levels)):
-                vector = [0] * dimension
+            for i in range(len(levels)):
+                if i == zero_index:
+                    continue
+                vector = [zero_index] * dimension
                 vector[j] = i
                 add(vector)
-        for i in range(1, len(levels)):
-            add([i] * dimension)
+        for i in range(len(levels)):
+            if i != zero_index:
+                add([i] * dimension)
         for j in range(dimension):
             for k in range(j + 1, dimension):
-                for i in (1, min(2, len(levels) - 1),
-                          min(4, len(levels) - 1),
-                          min(8, len(levels) - 1)):
-                    v = [0] * dimension
+                for i in range(len(levels)):
+                    if i == zero_index:
+                        continue
+                    v = [zero_index] * dimension
                     v[j] = i
                     v[k] = i
                     add(v)
+        # Âncoras com remanejamento (aumento em um lote e corte no outro).
+        inc_index = zero_index - 1 if zero_index > 0 else None
+        cut_index = min(len(levels) - 1, zero_index + 4)
+        if inc_index is not None:
+            for j in range(dimension):
+                for k in range(dimension):
+                    if j == k:
+                        continue
+                    v = [zero_index] * dimension
+                    v[j] = inc_index
+                    v[k] = cut_index
+                    add(v)
 
-        # Variedade de cortes leves e fortes: evita depender de um único
-        # padrão aleatório ao testar combinações entre vários fornecedores.
+        # Amostrar aumentos e cortes, enfatizando movimentos pequenos
+        # perto de zero, com algumas combinações de maior impacto.
         tries = 0
         while len(selections) < budget and tries < budget * 30:
             tries += 1
             if tries % 3 == 0:
                 v = rng.integers(0, len(levels), size=dimension)
             else:
+                weights = 1.0 / (1.0 + np.abs(levels) / 7.5)
                 v = rng.choice(len(levels), size=dimension,
-                               p=np.linspace(len(levels), 1, len(levels)) /
-                               np.linspace(len(levels), 1, len(levels)).sum())
+                               p=weights / weights.sum())
             add(v)
         cuts = levels[np.asarray(selections[:budget], dtype=int)]
     return cuts, int(space_size)
@@ -89,11 +107,12 @@ def _future_required(demand, days):
 
 def search_supply_combinations(
     res, close, *, budget=5000, max_cut_pct=50,
+    max_increase_pct=10,
     coverage_days=180, uncertainty_multiplier=1.0,
     fill_drop_limit_pp=0.2, rupture_rise_limit_pp=2.5,
     seed=20261021, top_k=12
 ):
-    """Busca cenários de corte para os lotes teoricamente negociáveis.
+    """Busca cortes e aumentos combinados nos lotes teoricamente negociáveis.
 
     Critério de ordenação: menor *maior excedente médio mensal* na janela
     crítica avaliável; desempates por menor aumento de vendas perdidas e
@@ -108,6 +127,8 @@ def search_supply_combinations(
         raise ValueError("Orçamento deve ser 1.000, 2.500, 5.000 ou 10.000.")
     if max_cut_pct < 2.5 or max_cut_pct > 75 or max_cut_pct % 2.5:
         raise ValueError("Corte máximo deve ser múltiplo de 2,5% até 75%.")
+    if max_increase_pct not in (0, 5, 10, 15, 20):
+        raise ValueError("Aumento máximo deve ser 0%, 5%, 10%, 15% ou 20%.")
     if not 0 <= fill_drop_limit_pp <= 5:
         raise ValueError("Queda máxima de fill rate inválida.")
     if not 0 <= rupture_rise_limit_pp <= 20:
@@ -143,7 +164,8 @@ def search_supply_combinations(
         )
 
     indices = np.asarray([x["index"] for x in eligible], dtype=int)
-    cuts, space = _candidate_grid(eligible, max_cut_pct, int(budget), int(seed))
+    cuts, space = _candidate_grid(eligible, max_cut_pct, max_increase_pct,
+                                  int(budget), int(seed))
     k = len(cuts)
     plan_candidates = np.tile(original, (k, 1))
     plan_candidates[:, indices] = (
@@ -152,8 +174,8 @@ def search_supply_combinations(
     )
     # No modelo operacional, quantidades podem ter casas decimais no plano
     # original. Preservar exatamente o valor original quando o corte é zero.
-    # Somente volumes realmente cortados são arredondados para unidades.
-    changed = cuts > 0
+    # Volumes de cortes E aumentos são arredondados para unidades.
+    changed = cuts != 0
     plan_candidates[:, indices] = np.where(
         changed, np.rint(plan_candidates[:, indices]),
         original[indices][None, :]
@@ -226,7 +248,7 @@ def search_supply_combinations(
                 screening.append((
                     float(peak[i]),
                     float(lost[i] - base_lost[0]),
-                    float(np.sum(original - plan_candidates[global_i])),
+                    float(np.sum(np.abs(original - plan_candidates[global_i]))),
                     global_i
                 ))
     screening.sort()
@@ -264,8 +286,8 @@ def search_supply_combinations(
             continue
         id_ = f"C{len(selected)+1}"
         cuts_text = " · ".join(
-            f"{label(months[j])}: -{p:.1f}%".replace(".0%", "%")
-            for j, p in zip(indices, cuts[i]) if p > 0
+            f"{label(months[j])}: {(-p):+.1f}%".replace(".0%", "%")
+            for j, p in zip(indices, cuts[i]) if p != 0
         )
         peak_index = int(detail["monthly"].loc[
             detail["monthly"]["Janela crítica"] &
@@ -274,9 +296,9 @@ def search_supply_combinations(
         ].idxmax())
         selected.append({
             "Cenário": id_,
-            "Cortes de produção": cuts_text,
+            "Ajustes por lote": cuts_text,
             "Lotes alterados": int(detail["changed_lots"]),
-            "Corte total (un.)": float(np.sum(original - plan)),
+            "Variação líquida (un.)": float(np.sum(plan - original)),
             "Excedente evitado no pior mês (un.)": float(reduction),
             "Maior excedente esperado (un.)": float(
                 detail["simulated"]["Excedente no pior mês (un.)"]
@@ -304,6 +326,7 @@ def search_supply_combinations(
         ),
         base_peak=base_peak, base_fill=base_fill,
         seed=int(seed), max_cut_pct=float(max_cut_pct),
+        max_increase_pct=float(max_increase_pct),
         coverage_days=float(coverage_days),
         uncertainty_multiplier=float(uncertainty_multiplier),
     )
