@@ -25,3 +25,21 @@ assert l["cor"]=="vermelho" and "alocação" in l["acao"]
 assert cor_do_produto(classificar(months,active,eval_,zero,zero,prod,2,close))=="cinza"
 assert len(lotes_alteraveis(months,prod,2,close))==2
 print("PASS: aviso, alerta, cor, prazo e disponibilidade teórica.")
+
+from smartlaunch_semaforo import cor_por_mes, vies_persistente
+
+l=linha("excesso", [.5,.4,.3,.2,.1,np.nan], zero, zero)
+assert l["decisor"].startswith("Comercial")
+assert "jul/26" in l["ate"]
+l=linha("excesso", [0,0,.05,.1,.25,np.nan], zero, np.array([0,0,100,100,100,0.]))
+assert l["decisor"].startswith("Supply")
+assert l["ate"].startswith("jul/26")
+cores=cor_por_mes(months, active, eval_, [0,0,.05,.1,.25,np.nan], zero,
+                  np.array([0,0,100,100,100,0.]), 2, close)
+assert [x["excesso"][0] for x in cores] == [
+    "cinza","cinza","verde","verde","vermelho","fora"
+]
+assert vies_persistente([-1]*8)["cor"]=="amarelo"
+assert vies_persistente([-1]*7+[1])["cor"]=="verde"
+assert vies_persistente([-1,1,-1])["cor"]=="cinza"
+print("PASS: responsáveis, prazos, cores mensais e viés exploratório.")
