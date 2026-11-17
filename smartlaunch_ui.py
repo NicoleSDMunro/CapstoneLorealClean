@@ -587,6 +587,7 @@ for p, source in SHEETS.items():
         "Análise": "Aguardando escolha do modelo"
     })
 st.dataframe(pd.DataFrame(audit_rows), hide_index=True, use_container_width=True,key="journey_audit")
+SEM.checar_censura(blocks, SHEETS, close, known)
 # Antes da escolha, o histórico mostra todos os SKUs presentes no arquivo.
 history = go.Figure()
 colors = ["#246A8C","#2D8176","#AF7B31","#75879B","#8268A2","#BB4E46"]
@@ -1258,7 +1259,7 @@ elif page == "Semáforo e simulador do gatilho":
         st.warning("Para simular alterações é necessário histórico de erros suficiente para " + chosen + ". " +
                    errors.get(chosen, "Simulação indisponível."))
     else:
-        SEM.pagina(results[chosen],close,chosen)
+        SEM.pagina(results[chosen],close,chosen,blocks=blocks,base=base)
 
 elif page == "Simulador de decisões":
     st.subheader("Simular uma intervenção específica")
