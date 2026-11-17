@@ -54,6 +54,22 @@ assert not at.exception,[str(e) for e in at.exception]
 assert at.session_state["operational_P3"]=="Oficial"
 assert has_stage("Previsão mensal de demanda")
 
+# A pesquisa só é executada por clique, não a cada edição ou rerun.
+assert any(b.label=="Buscar melhores combinações" for b in at.button)
+assert "optimizer_run" not in at.session_state
+next(b for b in at.button if b.label=="Buscar melhores combinações").click().run()
+assert not at.exception,[str(e) for e in at.exception]
+assert "optimizer_run" in at.session_state
+auto=at.session_state["optimizer_run"]["result"]
+assert auto["candidates_checked"]>=0
+if auto["best"] is not None:
+    assert any(b.label=="Aplicar cenário selecionado aos lotes" for b in at.button)
+    next(b for b in at.button if b.label=="Aplicar cenário selecionado aos lotes").click().run()
+    assert not at.exception,[str(e) for e in at.exception]
+    assert at.session_state["optimizer_applied"]["plan"]
+    assert at.session_state["monthly_editor_version"]>=1
+    assert has_stage("Simulador mensal · plano atual × simulado")
+
 # Os relatórios técnicos continuam opcionais, sem abas laterais.
 detail=selection("EXPLORAR DETALHES")
 for page in ("Previsão e modelos","Riscos de estoque","Impacto operacional",
