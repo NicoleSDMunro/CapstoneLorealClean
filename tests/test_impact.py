@@ -96,3 +96,46 @@ assert "Dentro do critério do TCC" in options.columns
 assert options.loc[options["Alternativa"]=="Cancelar lote",
                    "Dentro do critério do TCC"].iloc[0]==False
 print("TCC CUT RULE PASS",limits)
+
+
+# Simulador em estilo Excel: linhas editáveis de vários meses sobre a MESMA
+# distribuição de demanda. A base deve coincidir exatamente ao não editar lotes.
+from smartlaunch_impact import simulate_monthly_scenario
+res_monthly={
+    **res,
+    "center":np.asarray(dm.mean(axis=0)),
+    "evaluated":np.array([True]*8+[False]),
+}
+original_plan=res_monthly["production"].copy()
+same=simulate_monthly_scenario(res_monthly,original_plan)
+assert same["changed_lots"]==0
+assert same["same_demands"]
+assert len(same["monthly"])==len(months)
+assert np.isnan(same["monthly"].iloc[-1]["Excesso atual (%)"])
+for metric,difference in same["delta"].items():
+    assert abs(difference)<1e-9,(metric,difference)
+
+# Corte em um mês + aumento em outro, inclusive sensitividade do gatilho de
+# cobertura e da incerteza. Nenhuma alteração pode contaminar o controle.
+plan_multi=original_plan.copy()
+plan_multi[0]-=15.
+plan_multi[1]+=20.
+change=simulate_monthly_scenario(res_monthly,plan_multi,coverage_days=150,
+                                  uncertainty_multiplier=1.25)
+assert change["changed_lots"]==2
+assert np.allclose(res_monthly["production"],original_plan)
+assert change["simulated"]["Vendas perdidas na janela (un.)"]>=0
+assert change["original"]["Vendas perdidas na janela (un.)"]>=0
+assert abs(change["delta"]["Excedente no pior mês (un.)"])>1e-6 or abs(
+       change["delta"]["Vendas perdidas na janela (un.)"])>1e-6
+same_sensitivity=simulate_monthly_scenario(
+    res_monthly,original_plan,coverage_days=150,uncertainty_multiplier=1.25)
+assert all(abs(v)<1e-9 for v in same_sensitivity["delta"].values())
+try:
+    invalid=original_plan.copy()
+    invalid[0]=-1
+    simulate_monthly_scenario(res_monthly,invalid)
+    assert False,"Deveria rejeitar lotes negativos"
+except ValueError:
+    pass
+print("EXCEL-LIKE MULTI-LOT SIMULATOR PASS")
