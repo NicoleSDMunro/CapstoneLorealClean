@@ -280,3 +280,53 @@ def faixa_produtos(results, close):
         '<span style="color:#4b5866;margin-right:18px">Semáforo de excesso</span>'
         + "".join(partes) + "</div>", unsafe_allow_html=True,
     )
+
+
+def cartao_vies(res):
+    """Viés é diagnóstico exploratório do modelo, não sinal de excesso."""
+    v = vies_persistente(res.get("errors", []))
+    c = CORES[v["cor"]]
+    titulo = {"amarelo": "Reavaliar modelo", "verde": "Sem viés claro",
+              "cinza": "Amostra insuficiente"}[v["cor"]]
+    st.markdown(
+        f'<div style="background:#fff;border-left:6px solid {c["hex"]};border-radius:10px;padding:12px 16px">'
+        f'<div style="text-transform:uppercase;font-size:.75rem;color:#5f6b78">'
+        f'Previsão · modelo {html.escape(str(res.get("model","")))}</div>'
+        f'<div style="font-weight:740;color:{c["hex"]}">● {titulo}</div>'
+        f'<div>{html.escape(v["texto"])}</div></div>', unsafe_allow_html=True
+    )
+    st.caption(
+        "Teste do sinal bilateral sobre erros de arranque. Os pares podem ser dependentes, "
+        "o que limita a interpretação do p-valor. Não é gatilho validado no TCC "
+        "nem autoriza mudança automática de modelo."
+    )
+
+
+def checar_censura(blocks, sheets, close, known_fn):
+    """Triagem de estoque final zerado após o início das vendas."""
+    achados = []
+    for produto, sheet in sheets.items():
+        b = blocks[sheet]
+        vendido = known_fn(b["PV"], close)
+        positivos = vendido[vendido > 0]
+        if positivos.empty:
+            continue
+        for mes in vendido.index:
+            if mes < positivos.index.min():
+                continue
+            revisao = mes + 1
+            if (revisao in b["EST"].index and mes in b["EST"].columns
+                    and pd.notna(b["EST"].loc[revisao, mes])
+                    and float(b["EST"].loc[revisao, mes]) <= 0):
+                achados.append((produto, mes))
+    if achados:
+        st.warning(
+            "Possível demanda censurada por falta de estoque ao fechamento: " +
+            ", ".join(f"{p} em {_lab(t)}" for p, t in achados) +
+            ". Vendas podem subestimar a procura. Confirmar com a L’Oréal."
+        )
+    else:
+        st.caption(
+            "Nenhum estoque final zerado após início das vendas nos registros disponíveis. "
+            "Isso não descarta falta de produto dentro do mês."
+        )
