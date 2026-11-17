@@ -809,12 +809,12 @@ else:
     editor_key=("monthly_editor_"+"_".join(str(x).replace("/","-") for x in editor_scope)
                 +"_v"+str(st.session_state.get("monthly_editor_version",0)))
 
-    st.markdown("#### 2. Buscar automaticamente combinações de cortes")
+    st.markdown("#### 2. Buscar automaticamente combinações de cortes e aumentos")
     st.caption("O Smart Launch testa milhares de combinações de lotes ainda negociáveis "
-               "em tese, com cortes em passos de 2,5%. "
-               "Ordena pelo menor maior excedente esperado, rejeita novos sinais "
-               "de ruptura e protege o fill rate. Não altera pedidos reais.")
-    opt_left,opt_middle,opt_right=st.columns([1.1,1,1.1])
+               "em tese, incluindo redução de um mês e aumento de outro. "
+               "Busca o menor maior excedente esperado, evita novos sinais de ruptura "
+               "e protege o fill rate. Não altera pedidos reais.")
+    opt_left,opt_middle,opt_right=st.columns(3)
     with opt_left:
         opt_budget=st.selectbox("Combinações a testar",
             [1000,2500,5000,10000],index=2,key="optimizer_budget")
@@ -822,6 +822,10 @@ else:
         opt_maxcut=st.slider("Corte máximo por lote (%)",
             min_value=10.0,max_value=75.0,value=50.0,step=2.5,key="optimizer_cut")
     with opt_right:
+        opt_maxincrease=st.select_slider("Aumento máximo por lote (%)",
+            options=[0,5,10,15,20],value=10,key="optimizer_increase")
+    opt_guard,_=st.columns([1,2])
+    with opt_guard:
         opt_fill=st.slider("Queda máxima do fill rate (p.p.)",
             min_value=0.0,max_value=1.0,value=0.2,step=0.1,key="optimizer_fill")
     st.caption("Proteção adicional do TCC: sem novo sinal de ruptura e "
@@ -829,13 +833,14 @@ else:
                "A busca verifica apenas lotes que podem afetar os meses avaliáveis "
                "da janela crítica; os demais permanecem no plano original.")
     optimization_scope=(editor_scope,int(cover_days),float(uncertainty),
-                        int(opt_budget),float(opt_maxcut),float(opt_fill))
+                        int(opt_budget),float(opt_maxcut),int(opt_maxincrease),float(opt_fill))
     if st.button("Buscar melhores combinações",type="primary",
                  key="optimizer_search",use_container_width=True):
-        with st.spinner("Avaliando cortes de produção e riscos de ruptura..."):
+        with st.spinner("Comparando cortes, aumentos e riscos de ruptura..."):
             try:
                 result_search=search_supply_combinations(
                     result,close,budget=opt_budget,max_cut_pct=opt_maxcut,
+                    max_increase_pct=opt_maxincrease,
                     coverage_days=cover_days,uncertainty_multiplier=uncertainty,
                     fill_drop_limit_pp=opt_fill,rupture_rise_limit_pp=2.5)
             except (ValueError,TypeError) as exc:
@@ -874,7 +879,7 @@ else:
                        best["Mês de maior excedente"]+
                        ". O cenário não é uma ordem de produção nem substitui "
                        "a revisão de lead time, contratos ou capacidade.")
-            display_cols=["Cenário","Cortes de produção","Lotes alterados",
+            display_cols=["Cenário","Ajustes por lote","Lotes alterados",
                 "Excedente evitado no pior mês (un.)",
                 "Vendas perdidas adicionais (un.)","Fill rate (%)",
                 "Maior aumento ruptura (p.p.)","Mês de maior excedente"]
@@ -884,7 +889,7 @@ else:
             chosen_opt=st.selectbox("Cenário que deseja aplicar ao simulador manual",
                 search["shortlist"]["Cenário"].tolist(),
                 format_func=lambda ident: ident+" · "+
-                    search["shortlist"].set_index("Cenário").loc[ident,"Cortes de produção"],
+                    search["shortlist"].set_index("Cenário").loc[ident,"Ajustes por lote"],
                 key="optimizer_picked")
             if st.button("Aplicar cenário selecionado aos lotes",
                          key="optimizer_apply"):
