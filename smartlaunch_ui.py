@@ -23,7 +23,8 @@ from smartlaunch_metrics import (current_alert_opportunities, compare_verified_e
                                  format_opportunity_months)
 from smartlaunch_supply import future_lots, supply_diagnosis
 from smartlaunch_impact import (editable_lots, outcome_metrics, evaluate_lot_options,
-                                historical_mape_vs_official, tcc_lot_limits, tcc_check)
+                                historical_mape_vs_official, tcc_lot_limits, tcc_check,
+                                simulate_monthly_scenario)
 from smartlaunch_validation import (
     reconstruct_history, first_alerts, latest_verifiable_close,
     available_origin_reviews, EVENT_YES, EVENT_NO,
@@ -778,68 +779,154 @@ else:
     st.caption("Aviso >2,5% e alerta >20% são parâmetros exploratórios. "
                "O prazo é estimado em meses e precisa de confirmação contratual.")
 
-# 06 — Comparar alternativas usando exatamente a mesma sacola de demandas.
-journey_head("06", "Alternativas e decisão do planejador",
-             "Comparar o plano atual com um ajuste factível em tese e medir o trade-off estoque × serviço.")
+# 06 — Simulador mensal editável baseado na estrutura do Excel de junho/2026.
+journey_head("06", "Simulador mensal · plano atual × simulado",
+             "Ajuste vários lotes e compare em tempo real excesso de estoque, risco de ruptura e serviço.")
 if result is None:
-    st.info("A comparação probabilística depende da etapa 04; sem simulação não há ganho estimado.")
+    st.warning("Não há simulação probabilística válida para "+chosen+": "+
+               errors.get(chosen,"histórico de erros insuficiente"))
 else:
-    lot_options=editable_lots(result,close)
-    targets=[j for j in range(len(result["months"])) if bool(result["active"][j])
-             and bool(result["evaluated"][j])]
-    if not lot_options:
-        st.warning("Não há lote futuro positivo com prazo teórico elegível para avaliar um corte. "
-                   "Revisar compromissos não registrados e possíveis ações comerciais.")
-    elif not targets:
-        st.info("Não existem meses-alvo com cobertura avaliável nesta janela.")
-    else:
-        options_by_index={item["index"]:item for item in lot_options}
-        c_lot,c_target=st.columns(2)
-        with c_lot:
-            lot_index=st.selectbox("Lote positivo para simular",list(options_by_index),
-                format_func=lambda j: label(options_by_index[j]["month"])+
-                " · "+fmt(options_by_index[j]["units"])+" un.",key="journey_lot")
-        with c_target:
-            target_index=st.selectbox("Mês-alvo do excesso",targets,
-                          format_func=lambda j:label(result["months"][j]),key="journey_target")
-        picked_lot=options_by_index[lot_index]
-        if picked_lot["boundary"]:
-            st.warning("O lote está no mês-limite pelo lead time: só o fornecedor pode "
-                       "confirmar se ainda aceita a mudança.")
-        try:
-            alternatives,baseline=evaluate_lot_options(result,lot_index,target_index)
-        except ValueError as exc:
-            st.warning("Não foi possível comparar esta alternativa: "+str(exc))
-        else:
-            selected_option=st.selectbox("Alternativa para avaliar",
-                alternatives["Alternativa"].tolist(),key="journey_alternative")
-            selected=alternatives.loc[
-                alternatives["Alternativa"]==selected_option].iloc[0]
-            a,b,c=st.columns(3)
-            a.metric("Excesso evitado (estimado)",
-                     fmt(selected["Excesso potencialmente evitado (un.)"])+" un.")
-            b.metric("Vendas perdidas adicionais",
-                     fmt(selected["Vendas perdidas adicionais (un.)"])+" un.")
-            c.metric("Fill rate simulado",
-                     f'{selected["Fill rate simulado (%)"]:.1f}%')
-            st.plotly_chart(tradeoff_figure(alternatives,selected_option),
-                            use_container_width=True,key="journey_tradeoff")
-            st.dataframe(alternatives[["Alternativa",
-                "Excesso potencialmente evitado (un.)","Vendas perdidas adicionais (un.)",
-                "Fill rate simulado (%)","Dentro do critério do TCC"]],
-                hide_index=True,use_container_width=True,key="journey_alternatives_table")
-            if selected["Dentro do critério do TCC"]:
-                st.info("Cenário admissível sob as premissas do teste; "
-                        "revisão do planejador e confirmação com fornecedor obrigatórias.")
+    st.markdown("#### 1. Plano de produção original")
+    st.dataframe(supply_plan_table(result,close),hide_index=True,
+                 use_container_width=True,key="monthly_original_plan")
+    st.caption("Fonte: revisão do Triângulo. O simulador não altera o arquivo nem executa pedidos.")
+    lots=editable_lots(result,close)
+    st.markdown("#### 2. Edite a produção dos lotes disponíveis")
+    st.caption("Ajustes negativos reduzem produção; positivos aumentam. "
+               "É possível editar mais de um mês ao mesmo tempo.")
+    editor_scope=(st.session_state.get("data_digest","")[:12],str(review),chosen,choice_model)
+    editor_key="monthly_editor_"+"_".join(str(x).replace("/","-") for x in editor_scope)
+    if st.button("Restaurar lotes do plano atual",key="monthly_reset"):
+        st.session_state.pop(editor_key,None)
+        st.rerun()
+    candidate=np.asarray(result["production"],dtype=float).copy()
+    if lots:
+        if any(lot["boundary"] for lot in lots):
+            st.warning("Há lote(s) no mês-limite do lead time. "
+                       "A aceitação de qualquer alteração depende da data contratual de corte.")
+        grid=pd.DataFrame([{
+            "Índice":int(lot["index"]),
+            "Mês":label(lot["month"]),
+            "Lote atual (un.)":float(lot["units"]),
+            "Prazo teórico":label(lot["deadline"]),
+            "Alteração (un.)":0.0,
+        } for lot in lots])
+        edited=st.data_editor(grid,hide_index=True,num_rows="fixed",key=editor_key,
+            use_container_width=True,
+            disabled=["Índice","Mês","Lote atual (un.)","Prazo teórico"],
+            column_config={
+              "Índice":None,
+              "Alteração (un.)":st.column_config.NumberColumn(
+                  "Alteração (un.)",format="%.0f",help="Negativo = corte; positivo = aumento.")
+            })
+        bad=[]
+        for _,row in edited.iterrows():
+            idx=int(row["Índice"])
+            adjust=float(row["Alteração (un.)"])
+            proposed=float(result["production"][idx])+adjust
+            if not np.isfinite(proposed) or proposed<0:
+                bad.append(label(result["months"][idx]))
             else:
-                st.warning("A alternativa não atende aos critérios exploratórios de proteção "
-                           "do serviço ou de não criar novo excesso.")
-            if selected["Meses extrapolados após alvo"]>0:
-                st.caption("Excesso em unidades estimado com "+
-                           str(int(selected["Meses extrapolados após alvo"]))+
-                           " mês(es) de consumo futuro extrapolado(s).")
-    st.caption("Comparações contrafactuais com 1.000 demandas iguais no plano original e no "
-               "alternativo. Não representam redução de custos ou execução de cancelamento.")
+                candidate[idx]=proposed
+        if bad:
+            st.error("Alterações inválidas em "+", ".join(bad)+
+                     ". Nenhum lote pode ficar negativo.")
+            st.stop()
+    else:
+        st.info("Não há lotes positivos ainda alteráveis pelo lead time teórico. "
+                "O cenário permanece igual ao original; considere ações comerciais.")
+
+    with st.expander("Premissas de sensibilidade · mesmas regras para ambos os planos"):
+        x,y=st.columns(2)
+        with x:
+            cover_days=st.number_input("Cobertura para excesso (dias)",
+                   min_value=30,max_value=360,value=int(LIM),step=30,key="monthly_coverage")
+        with y:
+            uncertainty=st.slider("Multiplicador de incerteza",0.5,2.0,1.0,0.25,
+                                  key="monthly_uncertainty")
+        st.caption("Padrão do TCC: 180 dias e multiplicador 1,0. Alterações aqui afetam "
+                   "somente este simulador, não as etapas 3 a 5.")
+
+    analysis=simulate_monthly_scenario(result,candidate,
+                   coverage_days=cover_days,uncertainty_multiplier=uncertainty)
+    orig=analysis["original"]
+    alt=analysis["simulated"]
+    diff=analysis["delta"]
+    monthly=analysis["monthly"].copy()
+    monthly["Mês"]=[label(m) for m in result["months"]]
+
+    st.markdown("#### 3. Impactos do cenário")
+    c1,c2,c3,c4=st.columns(4)
+    c1.metric("Excedente no pior mês",fmt(alt["Excedente no pior mês (un.)"])+" un.",
+              delta=fmt(diff["Excedente no pior mês (un.)"])+" un.",delta_color="inverse")
+    c2.metric("Vendas perdidas na janela",fmt(alt["Vendas perdidas na janela (un.)"])+" un.",
+              delta=fmt(diff["Vendas perdidas na janela (un.)"])+" un.",delta_color="inverse")
+    c3.metric("Fill rate simulado",f'{alt["Fill rate (%)"]:.1f}%',
+              delta=f'{diff["Fill rate (%)"]:+.1f} p.p.')
+    c4.metric("Lotes alterados",str(analysis["changed_lots"]))
+    compare=pd.DataFrame([{
+        "Indicador":k, "Plano atual":orig[k],"Plano simulado":alt[k],
+        "Diferença":diff[k]} for k in orig])
+    st.dataframe(compare,hide_index=True,use_container_width=True,
+                 key="monthly_kpi_comparison")
+
+    st.markdown("#### 4. Excesso e estoque por mês")
+    ex_fig=go.Figure()
+    ex_fig.add_trace(go.Bar(x=monthly["Mês"],y=monthly["Excesso atual (%)"],
+                            name="Atual",marker_color="#B2C1CC"))
+    ex_fig.add_trace(go.Bar(x=monthly["Mês"],y=monthly["Excesso simulado (%)"],
+                            name="Simulado",marker_color="#246A8C"))
+    ex_fig.add_hline(y=20,line_dash="dash",line_color="#BB4E46",
+                     annotation_text="Alerta exploratório >20%")
+    ex_fig.update_layout(template="plotly_white",barmode="group",height=305,
+               margin=dict(l=8,r=8,t=30,b=8),yaxis_title="Chance de excesso (%)",
+               paper_bgcolor="#FFFFFF",plot_bgcolor="#FFFFFF",
+               legend=dict(orientation="h",y=1.18))
+    st.plotly_chart(ex_fig,use_container_width=True,key="monthly_excess_comparison")
+
+    stock_fig=go.Figure()
+    for col,name,color in [
+        ("Estoque P50 atual (un.)","Estoque atual","#A5B7C5"),
+        ("Estoque P50 simulado (un.)","Estoque simulado","#2D8176")]:
+        stock_fig.add_trace(go.Scatter(x=monthly["Mês"],y=monthly[col],
+            mode="lines+markers",name=name,line=dict(color=color,width=3)))
+    stock_fig.update_layout(template="plotly_white",height=270,
+               margin=dict(l=8,r=8,t=25,b=8),yaxis_title="Estoque final mediano (un.)",
+               paper_bgcolor="#FFFFFF",plot_bgcolor="#FFFFFF",
+               legend=dict(orientation="h",y=1.20))
+    st.plotly_chart(stock_fig,use_container_width=True,key="monthly_stock_comparison")
+
+    columns=["Mês","Produção original (un.)","Produção simulada (un.)",
+        "Variação do lote (un.)","Excedente atual (un.)","Excedente simulado (un.)",
+        "Excesso atual (%)","Excesso simulado (%)","Ruptura atual (%)",
+        "Ruptura simulada (%)","Cobertura atual P50 (dias)","Cobertura simulada P50 (dias)"]
+    with st.expander("Ver tabela mensal completa · estoque, cobertura, excesso e ruptura"):
+        st.dataframe(monthly[columns],hide_index=True,use_container_width=True,
+                     key="monthly_detailed_comparison")
+        st.caption("Excesso do último mês não avaliável: faltam meses futuros observados. "
+                   "Excedente em unidades nesse mês depende da extrapolação do consumo.")
+
+    st.markdown("#### 5. Orientação para o planejador")
+    if not analysis["changed_lots"]:
+        st.info("Plano inalterado: faça um ajuste para comparar alternativas.")
+    elif analysis["new_rupture_signal"] or analysis["max_rupture_rise_pp"]>2.5:
+        st.warning("A alteração gera novo sinal de ruptura ou aumenta sua chance "
+                   "em mais de 2,5 pontos percentuais: o corte exige revisão.")
+    elif analysis["new_excess_signal"]:
+        st.warning("O cenário cria novo sinal de excesso. Reavalie o aumento da produção.")
+    elif diff["Excedente no pior mês (un.)"]<0:
+        st.success("Redução simulada de excesso sem violar os gatilhos exploratórios "
+                   "verificados. Confirme prazos, contratos e lotes mínimos antes de decidir.")
+    else:
+        st.info("A alternativa não reduziu o pior excedente esperado. "
+                "Considere outra alteração ou mantenha o plano.")
+    st.caption("Apoio à decisão, não autorização de produção ou economia garantida. "
+               "O mesmo conjunto de 1.000 cenários é usado em ambos os planos.")
+
+    st.download_button("Exportar comparação (.csv)",
+        monthly[columns].to_csv(index=False).encode("utf-8-sig"),
+        file_name="smartlaunch_simulador_"+chosen+"_"+str(review)+".csv",
+        mime="text/csv",key="monthly_download")
 
 st.divider()
 st.markdown("### Resultado, confiabilidade e exportações")
