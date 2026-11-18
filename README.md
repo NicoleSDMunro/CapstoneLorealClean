@@ -1,15 +1,3 @@
-# Integração do pacote site_ajustes_tcc_v3.zip — 17/11/2026
-
-A v3 foi incorporada ao **site completo existente** sem remover previsão, simulação, busca de combinações ou as validações do repositório. A versão anterior está em `backup/pre-site-v3-2026-11-17`.
-
-**Alterações operacionais:** (1) os cartões de excesso mostram papel sugerido (Supply, Demanda ou Comercial) e prazo teórico para decisão; (2) a Etapa 1 alerta quando há mês com estoque final zerado após início das vendas, caso em que a venda pode estar censurada; (3) o novo diagnóstico exploratório identifica predominância do sinal dos erros de previsão, mas **não** é um gatilho validado pelo TCC; (4) o detalhamento do semáforo apresenta uma linha do tempo de fechamentos passados × meses-alvo, com excesso como visão principal e ruptura apenas como restrição. Os alertas históricos são reconstruídos retrospectivamente, não representam notificações efetivamente emitidas na época.
-
-**Limitações:** os prazos baseiam-se no mês de recebimento e no lead time informado, não em datas contratuais exatas; a estrela de excesso observado usa cobertura reestimada com vendas posteriores disponíveis e pode extrapolar a última observação, logo não comprova por si só um evento independentemente verificado. Resultados de cortes continuam sendo contrafactuais; decisões reais requerem aprovação do planejador e do fornecedor.
-
-A atualização não publica a planilha nem o notebook da L'Oréal no repositório público; os arquivos de evidência permanecem separados dos módulos do site.
-
----
-
 # Atualização do site conforme site_ajustes_tcc_v2.zip — 17/11/2026
 
 Integração sobre o **site completo existente**, não substituição por ZIP incompleto. O motor de previsão, a busca de combinações e as análises de impacto existentes foram preservados.

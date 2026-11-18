@@ -2,14 +2,12 @@
 import html
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 from smartlaunch_semaforo import (
     CORES, LEGENDA, _lab, cor_do_produto, lotes_alteraveis,
-    semaforo, semaforo_cenario, vies_persistente,
+    semaforo, semaforo_cenario,
 )
-from smartlaunch_linha_tempo import linha_do_tempo, CODIGO
 from smartlaunch_impact import simulate_monthly_scenario, tcc_lot_limits
 
 
@@ -40,9 +38,6 @@ def cartao(linha, titulo=None, compacto=False):
             f'{html.escape(linha["acao"])}</div>'
             f'<div style="color:#526477;font-size:.9rem;margin-top:4px"><b>Motivo:</b> '
             f'{html.escape(linha["porque"])}</div>'
-            f'<div style="color:#33414f;margin-top:7px;font-size:.88rem">'
-            f'<b>Quem conduz:</b> {html.escape(linha.get("decisor","—"))} · '
-            f'<b>Até quando:</b> {html.escape(linha.get("ate","—"))}</div>'
         )
     st.markdown(texto + "</div>", unsafe_allow_html=True)
 
@@ -59,8 +54,7 @@ def legenda():
             "Chance de excesso em cobertura ≥180 dias, nos meses avaliáveis da janela crítica. "
             "Aviso >2,5%; alerta >20% (limiares exploratórios do TCC). "
             "O prazo é mês do lote menos lead time, em meses, e depende de confirmação "
-            "dos contratos e da data de corte do fornecedor. Nenhuma cor aprova um corte. "
-            "Papéis de Supply, Demanda e Comercial são sugestões, a validar com a L’Oréal."
+            "dos contratos e da data de corte do fornecedor. Nenhuma cor aprova um corte."
         )
 
 
@@ -78,13 +72,11 @@ def semaforo_resumo(res, close, produto):
     if secundario["cor"] != "cinza":
         with st.expander("Restrição complementar: risco de ruptura"):
             cartao(secundario, "Risco de ruptura")
-    with st.expander("Diagnóstico complementar: viés da previsão", expanded=False):
-        cartao_vies(res)
     legenda()
     return linhas
 
 
-def pagina(res, close, produto, blocks=None, base=None):
+def pagina(res, close, produto):
     st.subheader("Recebi um alerta de excesso. O que posso fazer?")
     st.caption(
         f"Produto {produto} · fechamento {_lab(close)} · lead time {int(res['ltm'])} meses · "
@@ -105,8 +97,6 @@ def pagina(res, close, produto, blocks=None, base=None):
             "Não é possível simular cortes de fornecedor neste fechamento. "
             "Avaliar estoque já existente e alternativas comerciais com a L’Oréal."
         )
-        if blocks is not None and base is not None:
-            linha_do_tempo_ui(produto, close, blocks, base, model=res.get("model"))
         return
     linhas = []
     for l in lotes:
@@ -254,8 +244,6 @@ def pagina(res, close, produto, blocks=None, base=None):
         "Resultado contrafactual com as mesmas 1.000 trajetórias, não economia realizada. "
         "Alterações não são aplicadas ao Triângulo nem a pedidos no ERP."
     )
-    if blocks is not None and base is not None:
-        linha_do_tempo_ui(produto, close, blocks, base, model=res.get("model"))
 
 
 def faixa_produtos(results, close):
@@ -280,114 +268,3 @@ def faixa_produtos(results, close):
         '<span style="color:#4b5866;margin-right:18px">Semáforo de excesso</span>'
         + "".join(partes) + "</div>", unsafe_allow_html=True,
     )
-
-
-def cartao_vies(res):
-    """Viés é diagnóstico exploratório do modelo, não sinal de excesso."""
-    v = vies_persistente(res.get("errors", []))
-    c = CORES[v["cor"]]
-    titulo = {"amarelo": "Reavaliar modelo", "verde": "Sem viés claro",
-              "cinza": "Amostra insuficiente"}[v["cor"]]
-    st.markdown(
-        f'<div style="background:#fff;border-left:6px solid {c["hex"]};border-radius:10px;padding:12px 16px">'
-        f'<div style="text-transform:uppercase;font-size:.75rem;color:#5f6b78">'
-        f'Previsão · modelo {html.escape(str(res.get("model","")))}</div>'
-        f'<div style="font-weight:740;color:{c["hex"]}">● {titulo}</div>'
-        f'<div>{html.escape(v["texto"])}</div></div>', unsafe_allow_html=True
-    )
-    st.caption(
-        "Teste do sinal bilateral sobre erros de arranque. Os pares podem ser dependentes, "
-        "o que limita a interpretação do p-valor. Não é gatilho validado no TCC "
-        "nem autoriza mudança automática de modelo."
-    )
-
-
-def checar_censura(blocks, sheets, close, known_fn):
-    """Triagem de estoque final zerado após o início das vendas."""
-    achados = []
-    for produto, sheet in sheets.items():
-        b = blocks[sheet]
-        vendido = known_fn(b["PV"], close)
-        positivos = vendido[vendido > 0]
-        if positivos.empty:
-            continue
-        for mes in vendido.index:
-            if mes < positivos.index.min():
-                continue
-            revisao = mes + 1
-            if (revisao in b["EST"].index and mes in b["EST"].columns
-                    and pd.notna(b["EST"].loc[revisao, mes])
-                    and float(b["EST"].loc[revisao, mes]) <= 0):
-                achados.append((produto, mes))
-    if achados:
-        st.warning(
-            "Possível demanda censurada por falta de estoque ao fechamento: " +
-            ", ".join(f"{p} em {_lab(t)}" for p, t in achados) +
-            ". Vendas podem subestimar a procura. Confirmar com a L’Oréal."
-        )
-    else:
-        st.caption(
-            "Nenhum estoque final zerado após início das vendas nos registros disponíveis. "
-            "Isso não descarta falta de produto dentro do mês."
-        )
-
-
-def linha_do_tempo_ui(produto, close, blocks, base, model=None):
-    st.markdown("#### 5. Linha do tempo dos alertas de excesso")
-    st.caption(
-        "Fechamentos históricos por mês-alvo; cada cor é reconstruída, e não um aviso "
-        "enviado na época. ★ marca cobertura reestimada como excessiva com vendas posteriores "
-        "disponíveis, que podem envolver extrapolação da última demanda conhecida."
-    )
-    with st.spinner("Reconstruindo fechamentos anteriores..."):
-        historico, sem = linha_do_tempo(produto, close, blocks, base, model=model)
-    if historico.empty:
-        st.info("Não existem fechamentos suficientes para um histórico probabilístico confiável.")
-    else:
-        visao = st.radio("Visualizar", ["Excesso", "Ruptura (restrição)"], horizontal=True,
-                         key=f"timeline_view_{produto}_{_lab(close)}")
-        tipo = "excesso" if visao == "Excesso" else "ruptura"
-        fechs = sorted(historico["fechamento"].unique())
-        meses = sorted(historico["mes"].unique())
-        ix = {m:i for i,m in enumerate(fechs)}
-        jx = {m:i for i,m in enumerate(meses)}
-        z = np.full((len(fechs), len(meses)), np.nan)
-        textos = [["" for _ in meses] for _ in fechs]
-        for lin in historico.itertuples():
-            i = ix[lin.fechamento]
-            j = jx[lin.mes]
-            cor = getattr(lin, "cor_"+tipo)
-            chance = getattr(lin, "chance_"+tipo)
-            z[i,j] = CODIGO[cor]
-            if np.isfinite(chance):
-                textos[i][j] = f"{chance:.0%}" + (
-                    " ★" if tipo == "excesso" and lin.excesso_real is True else ""
-                )
-        escala = [
-            [0, "#FFFFFF"], [.1999, "#FFFFFF"],
-            [.2, "#E4E8ED"], [.3999, "#E4E8ED"],
-            [.4, "#A8D9BA"], [.5999, "#A8D9BA"],
-            [.6, "#F5D58E"], [.7999, "#F5D58E"],
-            [.8, "#E6A7A0"], [1, "#E6A7A0"],
-        ]
-        graf = go.Figure(go.Heatmap(
-            z=z, x=[_lab(m) for m in meses], y=[_lab(f) for f in fechs],
-            zmin=-.5, zmax=4.5, colorscale=escala,
-            text=textos, texttemplate="%{text}", showscale=False,
-            xgap=3, ygap=3,
-            hovertemplate="Fechamento %{y} · mês-alvo %{x}<br>%{text}<extra></extra>"
-        ))
-        graf.update_layout(
-            template="plotly_white", height=max(270,100+44*len(fechs)),
-            margin=dict(l=8,r=8,t=12,b=20), yaxis=dict(autorange="reversed"),
-            xaxis_title="Mês-alvo", yaxis_title="Fechamento"
-        )
-        st.plotly_chart(graf, use_container_width=True,
-                        key=f"timeline_graph_{produto}_{_lab(close)}_{tipo}")
-        st.caption("Vermelho = agir já; amarelo = agir até prazo; verde = acompanhar; "
-                   "cinza = sem sinal; branco = fora da janela ou sem avaliação.")
-    if sem:
-        st.caption(
-            "Fechamentos sem simulação: " + ", ".join(_lab(m) for m,_ in sem) +
-            ". Sem histórico de erros não significa risco zero."
-        )

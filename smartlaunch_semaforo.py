@@ -37,19 +37,6 @@ def lotes_alteraveis(months, production, ltm, close):
                             meses_ate_prazo=int((deadline-close).n)))
     return out
 
-def quem_decide(cor, lote, close):
-    """Papéis operacionais sugeridos; não substituem a definição da empresa."""
-    if cor == "vermelho" and lote is None:
-        return "Comercial, com Demanda", f"próximo fechamento ({_lab(close+1)})"
-    if cor == "vermelho":
-        return "Supply, com fornecedor", f"{_lab(lote['prazo'])} (lote {_lab(lote['mes'])})"
-    if cor == "amarelo":
-        return "Supply prepara; Demanda confirma", f"antes de {_lab(lote['prazo'])}"
-    if cor == "verde":
-        return "Demanda acompanha", f"próximo fechamento ({_lab(close+1)})"
-    return "—", "—"
-
-
 def classificar(months, active, evaluated, p_exc, p_rup, production, ltm, close):
     months = list(months)
     ativos = np.asarray(active, bool)
@@ -68,8 +55,7 @@ def classificar(months, active, evaluated, p_exc, p_rup, production, ltm, close)
                                mes_sinal=None, chance_max=max((probs[j] for j in janela), default=np.nan),
                                meses_sinal="", prazo=None, lote=None, lotes_uteis=[],
                                acao="Acompanhar no próximo fechamento.",
-                               porque="Nenhum mês avaliável da janela ultrapassou 2,5% de chance.",
-                               decisor="—", ate="—"))
+                               porque="Nenhum mês avaliável da janela ultrapassou 2,5% de chance."))
             continue
         alertas = [j for j in sinais if probs[j] > ALERTA]
         nivel = "alerta" if alertas else "aviso"
@@ -102,12 +88,10 @@ def classificar(months, active, evaluated, p_exc, p_rup, production, ltm, close)
             acao = (f"Preparar proposta para {verbo} o lote de {_lab(lote['mes'])}, "
                     f"com decisão até {_lab(lote['prazo'])}.")
             porque = f"Há {lote['meses_ate_prazo']} meses até o prazo teórico; reavaliar no próximo fechamento."
-        decisor, ate = quem_decide(cor, lote, close)
         linhas.append(dict(tipo=tipo, cor=cor, nivel=nivel,
                            mes_sinal=months[j0], chance_max=maxp, meses_sinal=meses_txt,
                            prazo=lote["prazo"] if lote else None, lote=lote,
-                           lotes_uteis=uteis, acao=acao, porque=porque,
-                           decisor=decisor, ate=ate))
+                           lotes_uteis=uteis, acao=acao, porque=porque))
     return linhas
 
 def cor_do_produto(linhas):
@@ -141,52 +125,3 @@ def tabela(linhas):
         "Prazo primeiro lote útil": _lab(l["prazo"]) if l["prazo"] is not None else "—",
         "O que fazer": l["acao"], "Por quê": l["porque"],
     } for l in linhas])
-
-def cor_por_mes(months, active, evaluated, p_exc, p_rup, production, ltm, close):
-    """Cor por mês-alvo isolado, para o histórico de fechamentos."""
-    p_exc = np.asarray(p_exc, float)
-    p_rup = np.asarray(p_rup, float)
-    active = np.asarray(active, bool)
-    evaluated = np.asarray(evaluated, bool)
-    linhas = []
-    for j, mes in enumerate(months):
-        item = {"mes": mes, "na_janela": bool(active[j])}
-        for tipo, chance in (("excesso", p_exc), ("ruptura", p_rup)):
-            if not active[j] or not np.isfinite(chance[j]) or (tipo == "excesso" and not evaluated[j]):
-                item[tipo] = ("fora", np.nan)
-                continue
-            v = np.zeros(len(months), float)
-            v[j] = chance[j]
-            result = classificar(months, active, evaluated,
-                                v if tipo == "excesso" else np.zeros(len(months)),
-                                v if tipo == "ruptura" else np.zeros(len(months)),
-                                production, ltm, close)
-            item[tipo] = (next(x for x in result if x["tipo"] == tipo)["cor"], float(chance[j]))
-        linhas.append(item)
-    return linhas
-
-
-def vies_persistente(erros):
-    """Teste de sinal bilateral exploratório, NÃO é gatilho validado pelo TCC.
-
-    Os erros de origem/horizontes sobrepostos podem ser dependentes. O p-valor
-    descritivo não constitui comprovação de viés.
-    """
-    e = np.asarray(erros, float)
-    e = e[np.isfinite(e) & (e != 0)]
-    n = len(e)
-    if n < 5:
-        return dict(cor="cinza", n=n, negativos=int((e < 0).sum()), p=np.nan,
-                    texto=f"Apenas {n} erros não nulos conferidos; diagnóstico inconclusivo.")
-    from math import comb
-    negativos = int((e < 0).sum())
-    extremo = max(negativos, n-negativos)
-    p = min(1., 2 * sum(comb(n, i) for i in range(extremo, n+1)) / (2**n))
-    if p < 0.05:
-        sentido = "acima" if negativos > n-negativos else "abaixo"
-        texto = (f"{extremo} de {n} erros com previsão {sentido} do vendido "
-                 f"(teste de sinal descritivo, p={p:.3f}). Revisar o modelo com Demanda.")
-        return dict(cor="amarelo", n=n, negativos=negativos, p=p, texto=texto)
-    return dict(cor="verde", n=n, negativos=negativos, p=p,
-                texto=(f"{negativos} de {n} erros têm previsão acima do vendido "
-                       f"(p={p:.3f}). Não há sinal claro nesse teste."))
